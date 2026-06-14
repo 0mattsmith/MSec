@@ -1,0 +1,6 @@
+{
+  "name": "MSec",
+  "description": "A secure, robust password manager and authenticator with real-time sync, email masking, and password generation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

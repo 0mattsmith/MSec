@@ -1,0 +1,87 @@
+export type ItemCategory = 'login' | 'passkey' | 'note' | 'card' | 'identity';
+
+export interface VaultFolder {
+  id: string;
+  name: string;
+  parentId?: string | null;
+  color?: string;
+  isPrivate?: boolean;
+  createdAt: number;
+}
+
+export interface CustomField {
+  id: string;
+  label: string;
+  value: string;
+  isHidden: boolean;
+}
+
+export interface VaultItem {
+  id: string;
+  type: ItemCategory;
+  title: string;
+  folderId?: string | null;
+  isFavorite: boolean;
+  isShared?: boolean;
+  createdAt: number;
+  updatedAt: number;
+  deletedAt?: number | null;
+  notes?: string;
+  customFields?: CustomField[];
+  
+  // Login fields
+  username?: string;
+  email?: string;
+  app?: string;
+  password?: string;
+  url?: string;
+  totpSecret?: string;
+  
+  // Card fields
+  cardNumber?: string;
+  cardExpiry?: string;
+  cardCvv?: string;
+  cardPin?: string;
+
+  // Identity fields
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  address?: string;
+}
+
+export interface MaskedEmail {
+  id: string;
+  maskedAddress: string;
+  forwardTo: string;
+  label: string;
+  serviceId?: string; // Link to a VaultItem
+  createdAt: number;
+}
+
+export interface GeneratorOptions {
+  length: number;
+  uppercase: boolean;
+  lowercase: boolean;
+  numbers: boolean;
+  symbols: boolean;
+}
+
+export interface AppSettings {
+  clipboardClearTimeoutSeconds: number; // 0 means disabled
+}
+
+export interface AppState {
+  isUnlocked: boolean;
+  masterPasswordSet: boolean;
+  theme: 'dark' | 'light';
+  settings: AppSettings;
+  items: VaultItem[];
+  folders: VaultFolder[];
+  maskedEmails: MaskedEmail[];
+  activeCategory: 'all' | ItemCategory | 'trash' | 'shared' | 'emails' | 'favorites' | 'generator' | 'health' | 'scanner' | 'settings' | 'authenticator' | 'dashboard';
+  activeFolderId: string | null;
+  selectedItemId: string | null;
+  isCustomizingColumns: boolean;
+  generatorOptions: GeneratorOptions;
+}

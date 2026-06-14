@@ -1,0 +1,95 @@
+{
+  "entities": {
+    "VaultItem": {
+      "title": "VaultItem",
+      "description": "A single vault item, holding passwords, notes, credit card data, API keys, etc.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "type": { "type": "string" },
+        "title": { "type": "string" },
+        "folderId": { "type": "string", "description": "Optional folder ID" },
+        "isFavorite": { "type": "boolean" },
+        "isShared": { "type": "boolean" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "deletedAt": { "type": "number", "description": "Used for trash logic" },
+        "notes": { "type": "string" },
+        "customFields": { "type": "array" },
+        "username": { "type": "string" },
+        "email": { "type": "string" },
+        "app": { "type": "string" },
+        "password": { "type": "string" },
+        "url": { "type": "string" },
+        "totpSecret": { "type": "string" },
+        "cardNumber": { "type": "string" },
+        "cardExpiry": { "type": "string" },
+        "cardCvv": { "type": "string" },
+        "cardPin": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" }
+      },
+      "required": ["userId", "type", "title", "isFavorite", "createdAt", "updatedAt"]
+    },
+    "VaultFolder": {
+      "title": "VaultFolder",
+      "description": "Folders group items",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "parentId": { "type": "string" },
+        "color": { "type": "string" },
+        "isPrivate": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["userId", "name", "createdAt"]
+    },
+    "MaskedEmail": {
+      "title": "MaskedEmail",
+      "description": "User's masked forwarding emails",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "maskedAddress": { "type": "string" },
+        "forwardTo": { "type": "string" },
+        "label": { "type": "string" },
+        "serviceId": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["userId", "maskedAddress", "forwardTo", "label", "createdAt"]
+    },
+    "UserSettings": {
+      "title": "UserSettings",
+      "description": "User specific app settings",
+      "type": "object",
+      "properties": {
+        "clipboardClearTimeoutSeconds": { "type": "number" },
+        "theme": { "type": "string" },
+        "masterPasswordSet": { "type": "boolean" },
+        "generatorOptions": { "type": "object" },
+        "updatedAt": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}/items/{itemId}": {
+      "schema": { "$ref": "#/entities/VaultItem" },
+      "description": "User's vault items, isolated to their user path"
+    },
+    "/users/{userId}/folders/{folderId}": {
+      "schema": { "$ref": "#/entities/VaultFolder" },
+      "description": "User's folders, isolated"
+    },
+    "/users/{userId}/maskedEmails/{emailId}": {
+      "schema": { "$ref": "#/entities/MaskedEmail" },
+      "description": "User's masked emails, isolated"
+    },
+    "/users/{userId}/settings/private": {
+      "schema": { "$ref": "#/entities/UserSettings" },
+      "description": "User's private app settings"
+    }
+  }
+}
