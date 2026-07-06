@@ -43,7 +43,7 @@ jobs:
           NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
 
       - name: Build debug APK
-        run: npx tauri android build -- --debug --apk
+        run: npx tauri android build --debug --apk
         env:
           NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
 
