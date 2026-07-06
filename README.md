@@ -21,6 +21,19 @@ npm run test:crypto  # encryption test suite
 
 You can use MSec fully offline (local-only mode) — just create a master password on first launch. Signing in with Google additionally syncs your encrypted vault through Firestore.
 
+## Platforms
+
+MSec is a PWA plus native desktop/Android builds via Tauri:
+
+- **Web / PWA** — deployed to GitHub Pages automatically on every push to `main` (`.github/workflows/deploy-pages.yml`). One-time setup: repo Settings → Pages → Source: "GitHub Actions". The app is installable (manifest + service worker) and works offline once loaded.
+- **Windows, macOS (Universal), Linux** — push a version tag (`git tag v0.1.0 && git push origin v0.1.0`) and `.github/workflows/release-desktop.yml` builds installers for all three and attaches them to a draft GitHub Release.
+- **Android** — experimental: run the "Build Android APK (debug)" workflow manually from the Actions tab to get an unsigned debug APK artifact. A signed release build needs a keystore added later.
+- **iOS** — no native build; install as a PWA (Safari → Share → Add to Home Screen). PWA limitations on iOS: no true biometric unlock integration, service worker storage can be evicted by the OS if the app is unused for weeks (your vault stays safe in Firestore if you use sync), and clipboard auto-clear timing is less reliable in the background.
+
+To develop the desktop app locally: `npm install`, then `npx tauri icon public/icons/icon-1024.png` once, then `npm run tauri dev` (requires Rust).
+
+On phones the dashboard switches to a homescreen-style layout: a 4-column grid of icons and folders with the remaining widgets stacked full-width below. Icon merging (drag-to-folder) is desktop-only; folders opened by tapping work everywhere.
+
 ## Security model
 
 MSec is zero-knowledge: your master password, and anything derived from it, never leaves your device.

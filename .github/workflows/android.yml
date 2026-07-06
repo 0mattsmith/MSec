@@ -1,0 +1,53 @@
+# EXPERIMENTAL: builds an unsigned debug APK via Tauri's Android support.
+# Run manually from the Actions tab. For a signed release APK/AAB you'll
+# need to add a keystore and signing config later.
+name: Build Android APK (debug)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install NDK
+        run: sdkmanager "ndk;26.1.10909125"
+
+      - name: Install Rust with Android targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Generate Tauri icons
+        run: npx tauri icon public/icons/icon-1024.png
+
+      - name: Initialize Android project
+        run: npx tauri android init
+        env:
+          NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
+
+      - name: Build debug APK
+        run: npx tauri android build -- --debug --apk
+        env:
+          NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: msec-android-debug-apk
+          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk

@@ -23,8 +23,21 @@ const ICONS: Record<string, React.FC<any>> = {
   Mail, Key, ShieldAlert, FileText, Clock, Link2, Briefcase
 };
 
+/** Below Tailwind's md breakpoint the dashboard becomes a homescreen. */
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 767px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return isMobile;
+}
+
 export function DashboardView() {
   const { theme, items, settings, setActiveCategory, setSelectedItemId, workspaces: vaultWorkspaces, updateWorkspaces } = useVault();
+  const isMobile = useIsMobile();
 
   // Local state for smooth dragging; synced back into the encrypted vault
   // (debounced) below. Workspaces are part of the vault payload now — they
@@ -365,7 +378,280 @@ export function DashboardView() {
   };
 
   const isCustomWallpaper = activeWorkspace.wallpaper && activeWorkspace.wallpaper.startsWith('data:image');
+
+  const folderOverlay = (() => {
+        const openFolder = openFolderId ? activeWorkspace.widgets.find(w => w.id === openFolderId && w.type === 'folder') : null;
+        if (!openFolder) return null;
+        const children = openFolder.children || [];
+        return (
+          <div 
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm pointer-events-auto"
+            onClick={(e) => { e.stopPropagation(); setOpenFolderId(null); }}
+          >
+            <div 
+              className="bg-white/95 dark:bg-[#1A1F26]/95 rounded-3xl shadow-2xl p-6 w-80 border border-gray-200 dark:border-slate-800 animate-in zoom-in-95"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input 
+                type="text"
+                value={openFolder.title}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  updateWorkspace({ widgets: activeWorkspace.widgets.map(w => w.id === openFolder.id ? { ...w, title: v } : w) });
+                }}
+                className="w-full text-center text-lg font-bold bg-transparent outline-none text-gray-900 dark:text-white border-b border-transparent focus:border-indigo-500 pb-1 mb-4 transition-colors"
+              />
+              <div className="grid grid-cols-3 gap-4">
+                {children.map(c => {
+                  const CIcon = ICONS[c.iconName] || Briefcase;
+                  return (
+                    <div key={c.id} className="relative flex flex-col items-center group/child">
+                      <button 
+                        onClick={() => popOutChild(openFolder.id, c.id)}
+                        title="Move out of folder"
+                        className="absolute -top-1.5 -right-0.5 z-10 p-0.5 opacity-0 group-hover/child:opacity-100 text-gray-500 hover:text-red-500 bg-white dark:bg-slate-800 rounded-full shadow border border-gray-200 dark:border-slate-700 transition-all"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                      <div className="w-12 h-12 bg-white dark:bg-slate-800 rounded-xl shadow border border-gray-200 dark:border-slate-700 flex items-center justify-center mb-1">
+                        <CIcon className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                      </div>
+                      <span className="text-[10px] font-medium text-gray-700 dark:text-slate-300 truncate w-full text-center">{c.title}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-gray-400 dark:text-slate-500 text-center mt-4">
+                Drag an icon onto this folder to add it. Hover an icon and press × to move it out.
+              </p>
+            </div>
+          </div>
+        );
+  })();
+
   
+  // ---- Mobile: iOS-homescreen-style experience ---------------------------
+  if (isMobile) {
+    const sorted = [...activeWorkspace.widgets].sort((a, b) => (a.y - b.y) || (a.x - b.x));
+    const gridWidgets = sorted.filter(w => w.type === 'icon' || w.type === 'folder');
+    const stackWidgets = sorted.filter(w => w.type !== 'icon' && w.type !== 'folder');
+
+    return (
+      <div className="relative h-full w-full overflow-y-auto custom-scrollbar" onClick={() => { setShowAddWidgetMenu(false); setShowWallpaperMenu(false); }}>
+        {isCustomWallpaper ? (
+          <div className="fixed inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${activeWorkspace.wallpaper})` }} />
+        ) : (
+          <div className={`fixed inset-0 ${activeWorkspace.wallpaper || 'bg-gradient-to-br from-indigo-50 to-pink-50 dark:from-[#0F1115] dark:to-[#18122B]'}`} />
+        )}
+
+        <div className="relative z-10 p-4 pb-28">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-3">
+            <h1 className="text-xl font-extrabold text-gray-900 dark:text-white bg-white/20 dark:bg-black/20 px-2 py-1 rounded backdrop-blur-sm truncate mr-3">{activeWorkspace.name}</h1>
+            <div className="relative shrink-0">
+              <button 
+                onClick={(e) => { e.stopPropagation(); setShowAddWidgetMenu(!showAddWidgetMenu); }} 
+                className="p-2 bg-indigo-600 text-white rounded-lg shadow-lg active:scale-95 transition-transform"
+              >
+                <Plus className="h-5 w-5" />
+              </button>
+              {showAddWidgetMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-[#1A1F26] rounded-xl shadow-2xl border border-gray-200 dark:border-slate-800 overflow-hidden py-1 z-50">
+                  <button onClick={() => addWidget('note')} className="w-full flex items-center px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300"><FileText className="h-4 w-4 mr-2 opacity-70" /> Sticky Note</button>
+                  <button onClick={() => addWidget('icon')} className="w-full flex items-center px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300"><Briefcase className="h-4 w-4 mr-2 opacity-70" /> Shortcut Icon</button>
+                  <button onClick={() => addWidget('login-list')} className="w-full flex items-center px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300"><Key className="h-4 w-4 mr-2 opacity-70" /> Login Links</button>
+                  <button onClick={() => addWidget('totp-list')} className="w-full flex items-center px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300"><Clock className="h-4 w-4 mr-2 opacity-70" /> TOTP Codes</button>
+                  <button onClick={() => addWidget('card')} className="w-full flex items-center px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300"><CreditCard className="h-4 w-4 mr-2 opacity-70" /> Debit Card</button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Workspace pills */}
+          <div className="flex space-x-2 overflow-x-auto pb-3 custom-scrollbar">
+            {workspaces.map(ws => (
+              <button
+                key={ws.id}
+                onClick={() => setActiveWorkspaceId(ws.id)}
+                className={`shrink-0 px-3 py-1 rounded-full text-xs font-bold transition-colors shadow-sm backdrop-blur-md ${
+                  activeWorkspaceId === ws.id 
+                    ? 'bg-indigo-600 text-white border border-indigo-500' 
+                    : 'bg-white/50 dark:bg-black/50 text-gray-700 dark:text-gray-300 border border-white/20 dark:border-white/10'
+                }`}
+              >
+                {ws.name}
+              </button>
+            ))}
+            <button onClick={createWorkspace} className="shrink-0 p-1 rounded-full bg-white/50 dark:bg-black/50 text-gray-700 dark:text-gray-300 border border-white/20 dark:border-white/10 shadow-sm backdrop-blur-md">
+              <PlusCircle className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Homescreen icon grid */}
+          {gridWidgets.length > 0 && (
+            <div className="grid grid-cols-4 gap-3 mb-5">
+              {gridWidgets.map(widget => {
+                if (widget.type === 'folder') {
+                  const children = widget.children || [];
+                  return (
+                    <button key={widget.id} onClick={(e) => { e.stopPropagation(); setOpenFolderId(widget.id); }} className="flex flex-col items-center active:scale-95 transition-transform">
+                      <div className="relative w-14 h-14 bg-white/60 dark:bg-slate-800/60 rounded-2xl shadow-lg border border-gray-200 dark:border-slate-700 flex items-center justify-center mb-1 backdrop-blur-md">
+                        <div className="grid grid-cols-2 gap-1">
+                          {children.slice(0, 4).map(c => {
+                            const CIcon = ICONS[c.iconName] || Briefcase;
+                            return <div key={c.id} className="w-5 h-5 rounded-md bg-white dark:bg-slate-700 flex items-center justify-center shadow-sm"><CIcon className="h-3 w-3 text-indigo-600 dark:text-indigo-400" /></div>;
+                          })}
+                        </div>
+                        {children.length > 4 && <div className="absolute -bottom-1.5 -right-1.5 bg-indigo-600 text-white text-[9px] font-bold rounded-full min-w-[18px] min-h-[18px] flex items-center justify-center shadow">{children.length}</div>}
+                      </div>
+                      <span className="text-[10px] font-semibold text-gray-800 dark:text-indigo-50 bg-white/70 dark:bg-black/50 px-1.5 py-0.5 rounded-full backdrop-blur-md truncate max-w-full">{widget.title}</span>
+                    </button>
+                  );
+                }
+                const IconComponent = ICONS[widget.iconName || 'Briefcase'] || Briefcase;
+                return (
+                  <div key={widget.id} className="flex flex-col items-center">
+                    <div className="w-14 h-14 bg-white/90 dark:bg-slate-800/90 rounded-2xl shadow-lg border border-gray-200 dark:border-slate-700 flex items-center justify-center mb-1 backdrop-blur-md">
+                      <IconComponent className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+                    </div>
+                    <span className="text-[10px] font-semibold text-gray-800 dark:text-indigo-50 bg-white/70 dark:bg-black/50 px-1.5 py-0.5 rounded-full backdrop-blur-md truncate max-w-full">{widget.title}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Stacked widgets */}
+          <div className="space-y-3">
+            {stackWidgets.map(widget => {
+              const removeBtn = (
+                <button onClick={(e) => removeWidget(widget.id, e)} className="p-1 text-gray-400 hover:text-red-500 shrink-0">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              );
+
+              if (widget.type === 'note') {
+                return (
+                  <div key={widget.id} className={`rounded-xl shadow-lg border border-black/5 p-4 ${widget.color} ${theme === 'dark' && !widget.isDark ? 'mix-blend-luminosity opacity-90' : ''}`}>
+                    <div className="flex items-center justify-between mb-2 pb-1 border-b border-black/10">
+                      <div className="flex items-center space-x-2 flex-1 min-w-0">
+                        <FileText className="h-3 w-3 opacity-60 shrink-0" />
+                        <input type="text" value={widget.title} onChange={(e) => { const v = e.target.value; updateWorkspace({ widgets: activeWorkspace.widgets.map(w => w.id === widget.id ? { ...w, title: v } : w) }); }} className="bg-transparent border-none outline-none font-bold text-sm w-full" />
+                      </div>
+                      {removeBtn}
+                    </div>
+                    <textarea value={widget.content || ''} onChange={(e) => { const v = e.target.value; updateWorkspace({ widgets: activeWorkspace.widgets.map(w => w.id === widget.id ? { ...w, content: v } : w) }); }} className="bg-transparent border-none outline-none text-sm w-full resize-none min-h-[4rem] opacity-80" placeholder="Write here..." />
+                  </div>
+                );
+              }
+
+              if (widget.type === 'login-list' || widget.type === 'totp-list') {
+                const isTotp = widget.type === 'totp-list';
+                const linked = items.filter(i => widget.linkedItems?.includes(i.id) && (!isTotp || i.totpSecret));
+                const available = isTotp
+                  ? items.filter(i => i.totpSecret && !widget.linkedItems?.includes(i.id))
+                  : items.filter(i => ['login', 'passkey'].includes(i.type) && !widget.linkedItems?.includes(i.id));
+                const HeaderIcon = isTotp ? Clock : Key;
+                return (
+                  <div key={widget.id} className="rounded-xl shadow-lg border border-black/10 bg-white/90 dark:bg-[#1A1F26]/90 backdrop-blur-md overflow-hidden">
+                    <div className="bg-indigo-600 px-3 py-2 text-white flex items-center justify-between">
+                      <div className="flex items-center space-x-2 flex-1 min-w-0">
+                        <HeaderIcon className="h-4 w-4 opacity-80 shrink-0" />
+                        <input type="text" value={widget.title} onChange={(e) => updateWorkspace({ widgets: activeWorkspace.widgets.map(w => w.id === widget.id ? { ...w, title: e.target.value } : w) })} className="bg-transparent border-none outline-none font-bold text-sm w-full" />
+                      </div>
+                      <button onClick={(e) => removeWidget(widget.id, e)} className="p-1 text-white/70 hover:text-white shrink-0"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                    <div className="p-2 space-y-2">
+                      {linked.map(item => (
+                        <div key={item.id} className="text-sm bg-gray-50 dark:bg-slate-800 p-2 rounded-lg border border-gray-100 dark:border-slate-700 flex items-center justify-between">
+                          <div className="min-w-0 pr-2 flex-1">
+                            <div className="font-bold text-gray-900 dark:text-gray-100 truncate">{item.title}</div>
+                            {isTotp ? (
+                              <div className="text-xs font-mono text-indigo-600 dark:text-indigo-400 font-bold flex items-center space-x-2">
+                                <span className="tracking-widest">{widget.content === item.id ? (generateTOTP(item.totpSecret!) || 'invalid') : '••••••'}</span>
+                                {widget.content === item.id && <span className="text-[9px] text-gray-400 tabular-nums">{getTimeUntilNextTOTP()}s</span>}
+                                <button onClick={() => updateWorkspace({ widgets: activeWorkspace.widgets.map(w => w.id === widget.id ? { ...w, content: w.content === item.id ? '' : item.id } : w) })} className="text-gray-400">
+                                  {widget.content === item.id ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="text-xs text-gray-500 truncate">{item.username || item.email}</div>
+                            )}
+                          </div>
+                          <div className="flex items-center space-x-1 shrink-0">
+                            <button 
+                              onClick={() => {
+                                if (isTotp) {
+                                  const code = item.totpSecret ? generateTOTP(item.totpSecret) : null;
+                                  if (code) copyToClipboardWithTimeout(code, settings.clipboardClearTimeoutSeconds);
+                                } else {
+                                  copyToClipboardWithTimeout(item.password || '', settings.clipboardClearTimeoutSeconds);
+                                }
+                              }}
+                              className="p-1.5 text-gray-500 bg-gray-100 dark:bg-slate-700 rounded active:scale-95"
+                            >
+                              <Copy className="h-3.5 w-3.5" />
+                            </button>
+                            <button onClick={() => updateWorkspace({ widgets: activeWorkspace.widgets.map(w => w.id === widget.id ? { ...w, linkedItems: w.linkedItems?.filter(id => id !== item.id) } : w) })} className="p-1.5 text-red-400 rounded active:scale-95">
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      {available.length > 0 && (
+                        <select
+                          className="text-xs w-full p-2 rounded bg-gray-100 dark:bg-slate-800 outline-none text-gray-700 dark:text-gray-300"
+                          value=""
+                          onChange={(e) => { if (e.target.value) updateWorkspace({ widgets: activeWorkspace.widgets.map(w => w.id === widget.id ? { ...w, linkedItems: [...(w.linkedItems || []), e.target.value] } : w) }); }}
+                        >
+                          <option value="" disabled>{isTotp ? '+ Add TOTP Code...' : '+ Add Item...'}</option>
+                          {available.map(i => <option key={i.id} value={i.id}>{i.title}</option>)}
+                        </select>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
+              if (widget.type === 'card') {
+                const linkedCard = items.find(i => i.id === widget.cardId);
+                return (
+                  <div key={widget.id} className={`rounded-xl shadow-lg p-5 text-white relative overflow-hidden ${widget.color || 'bg-gradient-to-tr from-rose-500 to-pink-600'}`}>
+                    <div className="opacity-20 absolute -right-10 -top-10 w-32 h-32 rounded-full border-4 border-white"></div>
+                    <div className="flex justify-between items-start relative z-10">
+                      <div className="font-bold">{linkedCard ? (linkedCard.bankName || linkedCard.cardIssuer || 'Bank Card') : 'Select a card on desktop'}</div>
+                      <button onClick={(e) => removeWidget(widget.id, e)} className="p-1 text-white/60 hover:text-white"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                    {linkedCard && (
+                      <div className="relative z-10 mt-5">
+                        <div className="text-lg font-mono tracking-[0.2em] flex items-center space-x-2">
+                          {widget.isDark ? (
+                            <span>{linkedCard.cardNumber?.replace(/(.{4})/g, '$1 ').trim() || 'XXXX XXXX XXXX XXXX'}</span>
+                          ) : (
+                            <>
+                              <span>•••• •••• •••• {linkedCard.cardNumber?.slice(-4) || 'XXXX'}</span>
+                              <button onClick={() => updateWorkspace({ widgets: activeWorkspace.widgets.map(w => w.id === widget.id ? { ...w, isDark: true } : w) })} className="text-white/50"><Eye className="h-4 w-4" /></button>
+                            </>
+                          )}
+                        </div>
+                        <div className="flex justify-between mt-3 text-xs uppercase opacity-80 font-mono">
+                          <span className="truncate max-w-[150px]">{linkedCard.cardholderName || 'Cardholder'}</span>
+                          <span>{linkedCard.cardExpiry || 'MM/YY'}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+              return null;
+            })}
+          </div>
+        </div>
+        {folderOverlay}
+      </div>
+    );
+  }
+
   return (
     <div 
        className="relative h-full w-full overflow-hidden select-none touch-none transition-colors"
@@ -929,56 +1215,7 @@ export function DashboardView() {
         })}
       </div>
 
-      {/* Open Folder Overlay */}
-      {(() => {
-        const openFolder = openFolderId ? activeWorkspace.widgets.find(w => w.id === openFolderId && w.type === 'folder') : null;
-        if (!openFolder) return null;
-        const children = openFolder.children || [];
-        return (
-          <div 
-            className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm pointer-events-auto"
-            onClick={(e) => { e.stopPropagation(); setOpenFolderId(null); }}
-          >
-            <div 
-              className="bg-white/95 dark:bg-[#1A1F26]/95 rounded-3xl shadow-2xl p-6 w-80 border border-gray-200 dark:border-slate-800 animate-in zoom-in-95"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <input 
-                type="text"
-                value={openFolder.title}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  updateWorkspace({ widgets: activeWorkspace.widgets.map(w => w.id === openFolder.id ? { ...w, title: v } : w) });
-                }}
-                className="w-full text-center text-lg font-bold bg-transparent outline-none text-gray-900 dark:text-white border-b border-transparent focus:border-indigo-500 pb-1 mb-4 transition-colors"
-              />
-              <div className="grid grid-cols-3 gap-4">
-                {children.map(c => {
-                  const CIcon = ICONS[c.iconName] || Briefcase;
-                  return (
-                    <div key={c.id} className="relative flex flex-col items-center group/child">
-                      <button 
-                        onClick={() => popOutChild(openFolder.id, c.id)}
-                        title="Move out of folder"
-                        className="absolute -top-1.5 -right-0.5 z-10 p-0.5 opacity-0 group-hover/child:opacity-100 text-gray-500 hover:text-red-500 bg-white dark:bg-slate-800 rounded-full shadow border border-gray-200 dark:border-slate-700 transition-all"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                      <div className="w-12 h-12 bg-white dark:bg-slate-800 rounded-xl shadow border border-gray-200 dark:border-slate-700 flex items-center justify-center mb-1">
-                        <CIcon className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
-                      </div>
-                      <span className="text-[10px] font-medium text-gray-700 dark:text-slate-300 truncate w-full text-center">{c.title}</span>
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="text-[10px] text-gray-400 dark:text-slate-500 text-center mt-4">
-                Drag an icon onto this folder to add it. Hover an icon and press × to move it out.
-              </p>
-            </div>
-          </div>
-        );
-      })()}
+      {folderOverlay}
 
       {/* Toast Notification */}
       {deletedWorkspace && (
