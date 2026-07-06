@@ -29,7 +29,7 @@ export function BottomNavigation({ className }: { className?: string }) {
          </button>
 
          <button 
-           onClick={() => setActiveCategory('tools' as any)} 
+           onClick={() => setActiveCategory('tools')} 
            className={cn("flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors", isTools || activeCategory === 'tools' ? "text-indigo-600 dark:text-indigo-400" : "text-gray-500 hover:text-gray-900 dark:text-slate-400 dark:hover:text-white")}
          >
            <Wrench className="h-5 w-5" />

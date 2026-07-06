@@ -99,7 +99,7 @@ export function MainView() {
              <div><h3 className="font-bold text-gray-900 dark:text-white">Breach Scanner</h3><p className="text-sm text-gray-500">Check if your data was compromised</p></div>
            </button>
            {/* Health */}
-           <button onClick={() => { setActiveCategory('health' as any); }} className="bg-white dark:bg-[#1A1F26] p-6 rounded-xl border border-gray-200 dark:border-slate-800 flex items-center shadow-sm hover:shadow-md transition-shadow text-left">
+           <button onClick={() => { setActiveCategory('health'); }} className="bg-white dark:bg-[#1A1F26] p-6 rounded-xl border border-gray-200 dark:border-slate-800 flex items-center shadow-sm hover:shadow-md transition-shadow text-left">
              <div className="w-12 h-12 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center mr-4">
                <ShieldCheck className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
              </div>
@@ -132,7 +132,7 @@ export function MainView() {
       return item.folderId === activeFolderId;
     }
 
-    if (activeCategory !== 'all' && activeCategory !== 'shared' && activeCategory !== 'emails') {
+    if (activeCategory !== 'all') {
       return item.type === activeCategory;
     }
 

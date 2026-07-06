@@ -1,30 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useVault } from '../store/VaultContext';
+import type { DashboardWidget as Widget, Workspace } from '../types';
+import { generateTOTP, getTimeUntilNextTOTP, copyToClipboardWithTimeout } from '../lib/utils';
 import { ChevronUp, ChevronDown, Link2, Clock, Mail, ShieldAlert, FileText, Key, Plus, Image as ImageIcon, Briefcase, PlusCircle, Trash2, X, Eye, Copy, MoreVertical, CreditCard, ChevronRight, Palette, Edit, EyeOff, Check } from 'lucide-react';
-
-interface Widget {
-  id: string;
-  type: string; // 'note' | 'icon' | 'login-list' | 'totp-list' | 'card'
-  x: number;
-  y: number;
-  w?: number; // width
-  h?: number; // height
-  title: string;
-  content?: string;
-  color?: string;
-  isDark?: boolean;
-  iconName?: string;
-  linkedItems?: string[]; // Item IDs
-  cardId?: string; // ID of the vault card item
-  isCollapsed?: boolean;
-}
-
-interface Workspace {
-  id: string;
-  name: string;
-  wallpaper: string | null;
-  widgets: Widget[];
-}
 
 const BUILT_IN_WALLPAPERS = [
   { id: 'default', name: 'Default Gradient', value: null },
@@ -46,15 +24,16 @@ const ICONS: Record<string, React.FC<any>> = {
 };
 
 export function DashboardView() {
-  const { theme, items, setActiveCategory, setSelectedItemId } = useVault();
-  
-  const [workspaces, setWorkspaces] = useState<Workspace[]>(() => {
-    const saved = localStorage.getItem('vaultx_workspaces');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return [{ id: '1', name: 'My Workspace', wallpaper: null, widgets: DEFAULT_WIDGETS }];
-  });
+  const { theme, items, settings, setActiveCategory, setSelectedItemId, workspaces: vaultWorkspaces, updateWorkspaces } = useVault();
+
+  // Local state for smooth dragging; synced back into the encrypted vault
+  // (debounced) below. Workspaces are part of the vault payload now — they
+  // are never written to disk in plaintext.
+  const [workspaces, setWorkspaces] = useState<Workspace[]>(() =>
+    vaultWorkspaces.length > 0
+      ? vaultWorkspaces
+      : [{ id: '1', name: 'My Workspace', wallpaper: null, widgets: DEFAULT_WIDGETS }]
+  );
   
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string>(workspaces[0]?.id || '1');
   const [isRenaming, setIsRenaming] = useState(false);
@@ -69,13 +48,26 @@ export function DashboardView() {
   const [workspaceToDelete, setWorkspaceToDelete] = useState<Workspace | null>(null);
   
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [openFolderId, setOpenFolderId] = useState<string | null>(null);
+  const dragMovedRef = useRef(false);
   const [resizingId, setResizingId] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    localStorage.setItem('vaultx_workspaces', JSON.stringify(workspaces));
+    const t = setTimeout(() => updateWorkspaces(workspaces), 400);
+    return () => clearTimeout(t);
+  }, [workspaces]);
+
+  // Re-render every second so TOTP codes and countdowns stay current.
+  const [nowTick, setNowTick] = useState(0);
+  useEffect(() => {
+    const hasTotp = workspaces.some(ws => ws.widgets.some(w => w.type === 'totp-list'));
+    if (!hasTotp) return;
+    const interval = setInterval(() => setNowTick(t => t + 1), 1000);
+    return () => clearInterval(interval);
   }, [workspaces]);
 
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId) || workspaces[0];
@@ -92,10 +84,95 @@ export function DashboardView() {
     setIsRenaming(false);
   };
 
+  // --- iOS-style icon folders ---------------------------------------------
+  // Icon widgets are w-28 (112px) wide, roughly 90px tall.
+  const iconCenter = (w: Widget) => ({ cx: w.x + 56, cy: w.y + 45 });
+
+  /** While dragging an icon, another icon or folder within range is a drop target. */
+  const findDropTarget = (widgets: Widget[], dragged: Widget): string | null => {
+    if (dragged.type !== 'icon') return null;
+    const { cx, cy } = iconCenter(dragged);
+    for (const w of widgets) {
+      if (w.id === dragged.id) continue;
+      if (w.type !== 'icon' && w.type !== 'folder') continue;
+      const c = iconCenter(w);
+      if (Math.hypot(c.cx - cx, c.cy - cy) < 48) return w.id;
+    }
+    return null;
+  };
+
+  /** Merge the dragged icon into the drop target (icon -> new folder, folder -> append). */
+  const mergeIntoTarget = (draggedId: string, targetId: string) => {
+    const dragged = activeWorkspace.widgets.find(w => w.id === draggedId);
+    const target = activeWorkspace.widgets.find(w => w.id === targetId);
+    if (!dragged || !target || dragged.type !== 'icon') return;
+    const draggedChild = { id: dragged.id, title: dragged.title, iconName: dragged.iconName || 'Briefcase' };
+    let newWidgets: Widget[];
+    if (target.type === 'folder') {
+      newWidgets = activeWorkspace.widgets
+        .filter(w => w.id !== dragged.id)
+        .map(w => w.id === target.id ? { ...w, children: [...(w.children || []), draggedChild] } : w);
+    } else {
+      const folder: Widget = {
+        id: crypto.randomUUID(),
+        type: 'folder',
+        x: target.x,
+        y: target.y,
+        title: 'Folder',
+        children: [
+          { id: target.id, title: target.title, iconName: target.iconName || 'Briefcase' },
+          draggedChild,
+        ],
+      };
+      newWidgets = activeWorkspace.widgets.filter(w => w.id !== dragged.id && w.id !== target.id).concat(folder);
+    }
+    updateWorkspace({ widgets: newWidgets });
+  };
+
+  /** Pop a single icon back out of a folder; dissolve the folder when one child remains. */
+  const popOutChild = (folderId: string, childId: string) => {
+    const folder = activeWorkspace.widgets.find(w => w.id === folderId);
+    if (!folder) return;
+    const child = (folder.children || []).find(c => c.id === childId);
+    if (!child) return;
+    const remaining = (folder.children || []).filter(c => c.id !== childId);
+    const popped: Widget = { id: child.id, type: 'icon', x: folder.x + 120, y: folder.y + 10, title: child.title, iconName: child.iconName };
+    let newWidgets = activeWorkspace.widgets
+      .map(w => w.id === folderId ? { ...w, children: remaining } : w)
+      .concat(popped);
+    if (remaining.length === 1) {
+      const last = remaining[0];
+      newWidgets = newWidgets
+        .filter(w => w.id !== folderId)
+        .concat({ id: last.id, type: 'icon', x: folder.x, y: folder.y, title: last.title, iconName: last.iconName });
+      setOpenFolderId(null);
+    }
+    updateWorkspace({ widgets: newWidgets });
+  };
+
+  /** Dissolve a folder entirely: all children return to the canvas as icons. */
+  const dissolveFolder = (folderId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const folder = activeWorkspace.widgets.find(w => w.id === folderId);
+    if (!folder) return;
+    const popped: Widget[] = (folder.children || []).map((c, i) => ({
+      id: c.id,
+      type: 'icon',
+      x: folder.x + (i % 3) * 110,
+      y: folder.y + Math.floor(i / 3) * 100,
+      title: c.title,
+      iconName: c.iconName,
+    }));
+    updateWorkspace({ widgets: activeWorkspace.widgets.filter(w => w.id !== folderId).concat(popped) });
+    if (openFolderId === folderId) setOpenFolderId(null);
+  };
+  // -------------------------------------------------------------------------
+
   const handlePointerDown = (e: React.PointerEvent, id: string, isResize: boolean = false) => {
     if (!isResize && (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLButtonElement)) return;
     e.preventDefault();
     e.stopPropagation();
+    dragMovedRef.current = false;
 
     if (e.pointerType === 'touch' && !isResize) {
       const clientX = e.clientX;
@@ -130,7 +207,8 @@ export function DashboardView() {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
-    
+    if (draggingId || resizingId) dragMovedRef.current = true;
+
     if (resizingId) {
       const newWidgets = activeWorkspace.widgets.map(w => {
         if (w.id === resizingId) {
@@ -163,6 +241,9 @@ export function DashboardView() {
       return w;
     });
     updateWorkspace({ widgets: newWidgets });
+
+    const draggedW = newWidgets.find(w => w.id === draggingId);
+    setDropTargetId(draggedW ? findDropTarget(newWidgets, draggedW) : null);
   };
   
   const handlePointerUp = () => {
@@ -170,6 +251,10 @@ export function DashboardView() {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
+    if (draggingId && dropTargetId) {
+      mergeIntoTarget(draggingId, dropTargetId);
+    }
+    setDropTargetId(null);
     if (draggingId) setDraggingId(null);
     if (resizingId) setResizingId(null);
   };
@@ -529,10 +614,10 @@ export function DashboardView() {
                   <div className="p-2 max-h-48 overflow-y-auto custom-scrollbar flex flex-col space-y-2">
                     {linkedItemsData.map(item => (
                     <div key={item.id} className="text-sm bg-gray-50 dark:bg-slate-800 p-2 rounded-lg border border-gray-100 dark:border-slate-700 relative group">
-                      <div className="font-bold text-gray-900 dark:text-gray-100 truncate pr-5">{item.name}</div>
+                      <div className="font-bold text-gray-900 dark:text-gray-100 truncate pr-5">{item.title}</div>
                       <div className="text-xs text-gray-500 truncate" title={item.username || item.email}>{item.username || item.email}</div>
                       <div className="flex space-x-1 mt-1">
-                        <button onClick={() => { navigator.clipboard.writeText(item.password || ''); }} className="px-2 py-0.5 bg-gray-200 dark:bg-slate-700 rounded text-[10px] hover:bg-gray-300 dark:hover:bg-slate-600 transition-colors">Copy Pwd</button>
+                        <button onClick={() => { copyToClipboardWithTimeout(item.password || '', settings.clipboardClearTimeoutSeconds); }} className="px-2 py-0.5 bg-gray-200 dark:bg-slate-700 rounded text-[10px] hover:bg-gray-300 dark:hover:bg-slate-600 transition-colors">Copy Pwd</button>
                         {item.totpSecret && <button onClick={() => { 
                           /* Copy TOTP somehow, wait we need TOTP logic, let's just make it a mock for now or use the go to functionality */
                           setActiveCategory('all'); setSelectedItemId(item.id);
@@ -553,7 +638,7 @@ export function DashboardView() {
                       }}
                     >
                       <option value="" disabled>+ Add Item...</option>
-                      {availableItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                      {availableItems.map(i => <option key={i.id} value={i.id}>{i.title}</option>)}
                     </select>
                   )}
                 </div>
@@ -589,7 +674,7 @@ export function DashboardView() {
                          >
                            <div className="font-bold text-[13px] truncate flex items-center w-full">
                              <CreditCard className="mr-2 w-3.5 h-3.5 opacity-60 flex-shrink-0" />
-                             [{i.cardIssuer || 'Card'}] {i.name}
+                             [{i.cardIssuer || 'Card'}] {i.title}
                            </div>
                            {i.bankName && <div className="text-[10px] text-white/50 ml-5.5 uppercase tracking-wider">{i.bankName}</div>}
                          </button>
@@ -694,10 +779,7 @@ export function DashboardView() {
           if (widget.type === 'totp-list') {
             const linkedItemsData = items.filter(i => widget.linkedItems?.includes(i.id) && i.totpSecret);
             const availableItems = items.filter(i => i.totpSecret && !widget.linkedItems?.includes(i.id));
-            const generateMockCode = (secret: string) => {
-              // Deterministic pseudo-code based on length for demonstration
-              return (Math.abs(secret.split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a }, 0)) % 1000000).toString().padStart(6, '0');
-            };
+            const totpTimer = getTimeUntilNextTOTP();
             return (
               <div 
                 key={widget.id}
@@ -727,16 +809,17 @@ export function DashboardView() {
                   {linkedItemsData.map(item => (
                     <div key={item.id} className="text-sm bg-gray-50 dark:bg-slate-800 p-2 rounded-lg border border-gray-100 dark:border-slate-700 relative flex justify-between items-center group">
                       <div className="min-w-0 pr-2">
-                         <div className="font-bold text-gray-900 dark:text-gray-100 truncate">{item.name}</div>
+                         <div className="font-bold text-gray-900 dark:text-gray-100 truncate">{item.title}</div>
                          <div className="text-xs font-mono text-indigo-600 dark:text-indigo-400 font-bold truncate flex items-center space-x-2">
-                           <span className="tracking-widest">{widget.content === item.id ? generateMockCode(item.totpSecret!) : '••••••'}</span>
+                           <span className="tracking-widest">{widget.content === item.id ? (generateTOTP(item.totpSecret!) || 'invalid') : '••••••'}</span>
+                           {widget.content === item.id && <span className="text-[9px] text-gray-400 tabular-nums">{totpTimer}s</span>}
                            <button onClick={() => updateWorkspace({ widgets: activeWorkspace.widgets.map(w => w.id === widget.id ? { ...w, content: w.content === item.id ? '' : item.id } : w) })} className="text-gray-400 hover:text-indigo-600">
                              {widget.content === item.id ? <EyeOff className="h-3 w-3 inline" /> : <Eye className="h-3 w-3 inline" />}
                            </button>
                          </div>
                       </div>
                       <div className="flex space-x-1">
-                        <button onClick={() => { if (item.totpSecret) navigator.clipboard.writeText(generateMockCode(item.totpSecret)); }} className="opacity-0 group-hover:opacity-100 p-1 text-gray-500 hover:bg-gray-200 dark:hover:bg-slate-600 rounded transition-opacity" title="Copy code">
+                        <button onClick={() => { const code = item.totpSecret ? generateTOTP(item.totpSecret) : null; if (code) copyToClipboardWithTimeout(code, settings.clipboardClearTimeoutSeconds); }} className="opacity-0 group-hover:opacity-100 p-1 text-gray-500 hover:bg-gray-200 dark:hover:bg-slate-600 rounded transition-opacity" title="Copy code">
                            <Copy className="h-3 w-3" />
                         </button>
                         <button onClick={() => updateWorkspace({ widgets: activeWorkspace.widgets.map(w => w.id === widget.id ? { ...w, linkedItems: w.linkedItems?.filter(id => id !== item.id) } : w) })} className="opacity-0 group-hover:opacity-100 p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-opacity" title="Remove">
@@ -757,11 +840,58 @@ export function DashboardView() {
                       }}
                     >
                       <option value="" disabled>+ Add TOTP Code...</option>
-                      {availableItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                      {availableItems.map(i => <option key={i.id} value={i.id}>{i.title}</option>)}
                     </select>
                   )}
                 </div>
                 )}
+              </div>
+            );
+          }
+
+          if (widget.type === 'folder') {
+            const isTarget = dropTargetId === widget.id;
+            const children = widget.children || [];
+            return (
+              <div 
+                key={widget.id}
+                onPointerDown={(e) => handlePointerDown(e, widget.id)}
+                onContextMenu={(e) => handleContextMenu(e, 'widget', widget.id)}
+                onClick={(e) => { e.stopPropagation(); if (!dragMovedRef.current) setOpenFolderId(widget.id); }}
+                className={`absolute flex flex-col items-center justify-center p-3 rounded-2xl transition-colors pointer-events-auto
+                  cursor-grab active:cursor-grabbing w-28 text-center group ${draggingId === widget.id ? 'z-50' : 'z-10 hover:bg-white/40 dark:hover:bg-black/40'}`}
+                style={{ top: widget.y, left: widget.x }}
+              >
+                <button onClick={(e) => dissolveFolder(widget.id, e)} title="Dissolve folder (icons return to the canvas)" className="absolute top-0 right-0 p-1 opacity-0 group-hover:opacity-100 flex items-center justify-center text-red-500 bg-white dark:bg-slate-800 rounded-full shadow-sm z-20 hover:scale-110 transition-all">
+                  <X className="h-3 w-3" />
+                </button>
+                <div className={`relative w-14 h-14 bg-white/60 dark:bg-slate-800/60 rounded-2xl shadow-lg border border-gray-200 dark:border-slate-700 flex items-center justify-center mb-2 group-hover:shadow-xl transition-all group-hover:-translate-y-1 backdrop-blur-md ${isTarget ? 'ring-4 ring-indigo-400 scale-110 bg-indigo-50 dark:bg-indigo-900/60' : ''}`}>
+                  <div className="grid grid-cols-2 gap-1">
+                    {children.slice(0, 4).map(c => {
+                      const CIcon = ICONS[c.iconName] || Briefcase;
+                      return (
+                        <div key={c.id} className="w-5 h-5 rounded-md bg-white dark:bg-slate-700 flex items-center justify-center shadow-sm">
+                          <CIcon className="h-3 w-3 text-indigo-600 dark:text-indigo-400" />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {children.length > 4 && (
+                    <div className="absolute -bottom-1.5 -right-1.5 bg-indigo-600 text-white text-[9px] font-bold rounded-full w-4.5 h-4.5 min-w-[18px] min-h-[18px] flex items-center justify-center shadow">
+                      {children.length}
+                    </div>
+                  )}
+                </div>
+                <input 
+                  type="text"
+                  value={widget.title}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    updateWorkspace({ widgets: activeWorkspace.widgets.map(w => w.id === widget.id ? { ...w, title: v } : w) });
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-xs font-semibold text-gray-800 dark:text-indigo-50 bg-white/80 dark:bg-black/60 px-2 py-0.5 rounded-full backdrop-blur-md border border-white/20 truncate w-full outline-none text-center outline-indigo-500 transition-colors"
+                />
               </div>
             );
           }
@@ -780,7 +910,7 @@ export function DashboardView() {
                 <button onClick={(e) => removeWidget(widget.id, e)} className="absolute top-0 right-0 p-1 opacity-0 group-hover:opacity-100 flex items-center justify-center text-red-500 bg-white dark:bg-slate-800 rounded-full shadow-sm z-20 hover:scale-110 transition-all">
                   <Trash2 className="h-3 w-3" />
                 </button>
-                <div className="w-14 h-14 bg-white/90 dark:bg-slate-800/90 rounded-2xl shadow-lg border border-gray-200 dark:border-slate-700 flex items-center justify-center mb-2 group-hover:shadow-xl transition-all group-hover:-translate-y-1 backdrop-blur-md">
+                <div className={`w-14 h-14 bg-white/90 dark:bg-slate-800/90 rounded-2xl shadow-lg border border-gray-200 dark:border-slate-700 flex items-center justify-center mb-2 group-hover:shadow-xl transition-all group-hover:-translate-y-1 backdrop-blur-md ${dropTargetId === widget.id ? 'ring-4 ring-indigo-400 scale-110 bg-indigo-50 dark:bg-indigo-900/60' : ''}`}>
                    <IconComponent className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
                 </div>
                 <input 
@@ -798,6 +928,57 @@ export function DashboardView() {
           return null;
         })}
       </div>
+
+      {/* Open Folder Overlay */}
+      {(() => {
+        const openFolder = openFolderId ? activeWorkspace.widgets.find(w => w.id === openFolderId && w.type === 'folder') : null;
+        if (!openFolder) return null;
+        const children = openFolder.children || [];
+        return (
+          <div 
+            className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm pointer-events-auto"
+            onClick={(e) => { e.stopPropagation(); setOpenFolderId(null); }}
+          >
+            <div 
+              className="bg-white/95 dark:bg-[#1A1F26]/95 rounded-3xl shadow-2xl p-6 w-80 border border-gray-200 dark:border-slate-800 animate-in zoom-in-95"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input 
+                type="text"
+                value={openFolder.title}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  updateWorkspace({ widgets: activeWorkspace.widgets.map(w => w.id === openFolder.id ? { ...w, title: v } : w) });
+                }}
+                className="w-full text-center text-lg font-bold bg-transparent outline-none text-gray-900 dark:text-white border-b border-transparent focus:border-indigo-500 pb-1 mb-4 transition-colors"
+              />
+              <div className="grid grid-cols-3 gap-4">
+                {children.map(c => {
+                  const CIcon = ICONS[c.iconName] || Briefcase;
+                  return (
+                    <div key={c.id} className="relative flex flex-col items-center group/child">
+                      <button 
+                        onClick={() => popOutChild(openFolder.id, c.id)}
+                        title="Move out of folder"
+                        className="absolute -top-1.5 -right-0.5 z-10 p-0.5 opacity-0 group-hover/child:opacity-100 text-gray-500 hover:text-red-500 bg-white dark:bg-slate-800 rounded-full shadow border border-gray-200 dark:border-slate-700 transition-all"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                      <div className="w-12 h-12 bg-white dark:bg-slate-800 rounded-xl shadow border border-gray-200 dark:border-slate-700 flex items-center justify-center mb-1">
+                        <CIcon className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                      </div>
+                      <span className="text-[10px] font-medium text-gray-700 dark:text-slate-300 truncate w-full text-center">{c.title}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-gray-400 dark:text-slate-500 text-center mt-4">
+                Drag an icon onto this folder to add it. Hover an icon and press × to move it out.
+              </p>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Toast Notification */}
       {deletedWorkspace && (

@@ -8,7 +8,7 @@ service cloud.firestore {
     function isValidId(id) {
        return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
-    
+
     function isSignedIn() {
        return request.auth != null; // Notice: skipping email_verified for simpler google auth setup
     }
@@ -17,53 +17,20 @@ service cloud.firestore {
     function existing() { return resource.data; }
     function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
 
-    function isValidVaultItem(data) {
-       return data.keys().hasAll(['userId', 'type', 'title', 'isFavorite', 'createdAt', 'updatedAt']) 
+    // Zero-knowledge storage: every synced document is an opaque AES-GCM
+    // blob encrypted client-side with a key derived from the master
+    // password. The server never sees plaintext.
+    //
+    // hasOnly() is the important part — it REJECTS any write containing
+    // plaintext vault fields (title, password, totpSecret, ...), so an
+    // outdated or misbehaving client cannot accidentally leak secrets
+    // into Firestore.
+    function isValidBlobDoc(data) {
+       return data.keys().hasAll(['blob', 'userId'])
+         && data.keys().hasOnly(['blob', 'userId', 'updatedAt'])
+         && data.blob is string && data.blob.size() > 0 && data.blob.size() <= 300000
          && data.userId is string && data.userId == request.auth.uid
-         && data.type is string && data.type.size() <= 64
-         && data.title is string && data.title.size() <= 256
-         && data.isFavorite is bool
-         && data.createdAt is number
-         && data.updatedAt is number
-         && (!("folderId" in data) || data.folderId == null || (data.folderId is string && data.folderId.size() <= 128))
-           && (!("isShared" in data) || data.isShared == null || data.isShared is bool)
-         && (!("deletedAt" in data) || data.deletedAt == null || data.deletedAt is number)
-         && (!("notes" in data) || data.notes == null || (data.notes is string && data.notes.size() <= 100000))
-         && (!("customFields" in data) || data.customFields == null || (data.customFields is list && data.customFields.size() <= 100))
-         && (!("username" in data) || data.username == null || (data.username is string && data.username.size() <= 256))
-         && (!("email" in data) || data.email == null || (data.email is string && data.email.size() <= 256))
-         && (!("app" in data) || data.app == null || (data.app is string && data.app.size() <= 256))
-         && (!("password" in data) || data.password == null || (data.password is string && data.password.size() <= 256))
-         && (!("url" in data) || data.url == null || (data.url is string && data.url.size() <= 2048))
-         && (!("totpSecret" in data) || data.totpSecret == null || (data.totpSecret is string && data.totpSecret.size() <= 256))
-         && (!("cardNumber" in data) || data.cardNumber == null || (data.cardNumber is string && data.cardNumber.size() <= 256))
-         && (!("cardExpiry" in data) || data.cardExpiry == null || (data.cardExpiry is string && data.cardExpiry.size() <= 256))
-         && (!("cardCvv" in data) || data.cardCvv == null || (data.cardCvv is string && data.cardCvv.size() <= 256))
-         && (!("cardPin" in data) || data.cardPin == null || (data.cardPin is string && data.cardPin.size() <= 256))
-         && (!("firstName" in data) || data.firstName == null || (data.firstName is string && data.firstName.size() <= 256))
-         && (!("lastName" in data) || data.lastName == null || (data.lastName is string && data.lastName.size() <= 256))
-         && (!("phone" in data) || data.phone == null || (data.phone is string && data.phone.size() <= 256))
-         && (!("address" in data) || data.address == null || (data.address is string && data.address.size() <= 1000));
-    }
-
-    function isValidVaultFolder(data) {
-       return data.keys().hasAll(['userId', 'name', 'createdAt'])
-         && data.userId is string && data.userId == request.auth.uid
-         && data.name is string && data.name.size() <= 256
-         && data.createdAt is number
-         && (!("parentId" in data) || data.parentId == null || (data.parentId is string && data.parentId.size() <= 128))
-         && (!("color" in data) || data.color == null || (data.color is string && data.color.size() <= 32))
-         && (!("isPrivate" in data) || data.isPrivate == null || data.isPrivate is bool);
-    }
-
-    function isValidMaskedEmail(data) {
-       return data.keys().hasAll(['userId', 'maskedAddress', 'forwardTo', 'label', 'createdAt'])
-         && data.userId is string && data.userId == request.auth.uid
-         && data.maskedAddress is string && data.maskedAddress.size() <= 256
-         && data.forwardTo is string && data.forwardTo.size() <= 256
-         && data.label is string && data.label.size() <= 256
-         && data.createdAt is number
-         && (!("serviceId" in data) || data.serviceId == null || (data.serviceId is string && data.serviceId.size() <= 128));
+         && (!("updatedAt" in data) || data.updatedAt is number);
     }
 
     function isValidUserSettings(data) {
@@ -78,24 +45,24 @@ service cloud.firestore {
       match /items/{itemId} {
         allow read: if isOwner(userId) && isValidId(itemId) && existing().userId == request.auth.uid;
         allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
-        allow create: if isOwner(userId) && isValidId(itemId) && isValidVaultItem(incoming());
-        allow update: if isOwner(userId) && isValidId(itemId) && isValidVaultItem(incoming()) && incoming().createdAt == existing().createdAt && incoming().userId == existing().userId;
+        allow create: if isOwner(userId) && isValidId(itemId) && isValidBlobDoc(incoming());
+        allow update: if isOwner(userId) && isValidId(itemId) && isValidBlobDoc(incoming()) && incoming().userId == existing().userId;
         allow delete: if isOwner(userId) && isValidId(itemId) && existing().userId == request.auth.uid;
       }
-      
+
       match /folders/{folderId} {
         allow read: if isOwner(userId) && isValidId(folderId) && existing().userId == request.auth.uid;
         allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
-        allow create: if isOwner(userId) && isValidId(folderId) && isValidVaultFolder(incoming());
-        allow update: if isOwner(userId) && isValidId(folderId) && isValidVaultFolder(incoming()) && incoming().createdAt == existing().createdAt && incoming().userId == existing().userId;
+        allow create: if isOwner(userId) && isValidId(folderId) && isValidBlobDoc(incoming());
+        allow update: if isOwner(userId) && isValidId(folderId) && isValidBlobDoc(incoming()) && incoming().userId == existing().userId;
         allow delete: if isOwner(userId) && isValidId(folderId) && existing().userId == request.auth.uid;
       }
 
       match /maskedEmails/{emailId} {
         allow read: if isOwner(userId) && isValidId(emailId) && existing().userId == request.auth.uid;
         allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
-        allow create: if isOwner(userId) && isValidId(emailId) && isValidMaskedEmail(incoming());
-        allow update: if isOwner(userId) && isValidId(emailId) && isValidMaskedEmail(incoming()) && incoming().createdAt == existing().createdAt && incoming().userId == existing().userId;
+        allow create: if isOwner(userId) && isValidId(emailId) && isValidBlobDoc(incoming());
+        allow update: if isOwner(userId) && isValidId(emailId) && isValidBlobDoc(incoming()) && incoming().userId == existing().userId;
         allow delete: if isOwner(userId) && isValidId(emailId) && existing().userId == request.auth.uid;
       }
 

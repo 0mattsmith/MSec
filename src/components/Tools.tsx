@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useVault } from '../store/VaultContext';
 import { Search, ShieldAlert, CheckCircle, AlertTriangle, Shield, Mail, RefreshCw, Plus, X, Trash2 } from 'lucide-react';
 import { generatePassword, checkPasswordStrength } from '../lib/utils';
-import { zxcvbn } from 'zxcvbn'; // Just to make sure it's not complaining. wait, utils imports it.
 
 export function PasswordHealthTool() {
    const { items } = useVault();

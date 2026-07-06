@@ -42,6 +42,12 @@ export interface VaultItem {
   cardExpiry?: string;
   cardCvv?: string;
   cardPin?: string;
+  cardIssuer?: string;
+  bankName?: string;
+  cardholderName?: string;
+  cardStartDate?: string;
+  cardSortCode?: string;
+  cardAccount?: string;
 
   // Identity fields
   firstName?: string;
@@ -57,6 +63,31 @@ export interface MaskedEmail {
   label: string;
   serviceId?: string; // Link to a VaultItem
   createdAt: number;
+}
+
+export interface DashboardWidget {
+  id: string;
+  type: string; // 'note' | 'icon' | 'login-list' | 'totp-list' | 'card'
+  x: number;
+  y: number;
+  w?: number;
+  h?: number;
+  title: string;
+  content?: string;
+  color?: string;
+  isDark?: boolean;
+  iconName?: string;
+  linkedItems?: string[]; // VaultItem IDs
+  cardId?: string;
+  isCollapsed?: boolean;
+  children?: { id: string; title: string; iconName: string }[]; // for 'folder' widgets
+}
+
+export interface Workspace {
+  id: string;
+  name: string;
+  wallpaper: string | null;
+  widgets: DashboardWidget[];
 }
 
 export interface GeneratorOptions {
@@ -79,7 +110,8 @@ export interface AppState {
   items: VaultItem[];
   folders: VaultFolder[];
   maskedEmails: MaskedEmail[];
-  activeCategory: 'all' | ItemCategory | 'trash' | 'shared' | 'emails' | 'favorites' | 'generator' | 'health' | 'scanner' | 'settings' | 'authenticator' | 'dashboard';
+  workspaces: Workspace[];
+  activeCategory: 'all' | ItemCategory | 'trash' | 'shared' | 'emails' | 'favorites' | 'generator' | 'health' | 'scanner' | 'settings' | 'authenticator' | 'dashboard' | 'tools';
   activeFolderId: string | null;
   selectedItemId: string | null;
   isCustomizingColumns: boolean;

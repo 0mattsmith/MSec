@@ -7,17 +7,24 @@ export function LockScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!masterPasswordSet) {
-      setMasterPassword(password);
-    } else {
-      const success = unlock(password);
-      if (!success) {
-        setError(true);
-        setTimeout(() => setError(false), 2000);
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (!masterPasswordSet) {
+        await setMasterPassword(password);
+      } else {
+        const success = await unlock(password);
+        if (!success) {
+          setError(true);
+          setTimeout(() => setError(false), 2000);
+        }
       }
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -66,9 +73,10 @@ export function LockScreen() {
 
           <button
             type="submit"
-            className="w-full rounded-md bg-indigo-600 py-3 font-bold text-sm uppercase tracking-wider text-white transition-all hover:bg-indigo-500 active:scale-95 shadow-lg shadow-indigo-500/20"
+            disabled={busy}
+            className="w-full rounded-md bg-indigo-600 py-3 font-bold text-sm uppercase tracking-wider text-white transition-all hover:bg-indigo-500 active:scale-95 shadow-lg shadow-indigo-500/20 disabled:opacity-60 disabled:cursor-wait"
           >
-            {masterPasswordSet ? 'Unlock Vault' : 'Create Vault'}
+            {busy ? 'Decrypting…' : masterPasswordSet ? 'Unlock Vault' : 'Create Vault'}
           </button>
         </form>
 
