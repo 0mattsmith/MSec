@@ -64,6 +64,16 @@ export function DashboardView() {
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [openFolderId, setOpenFolderId] = useState<string | null>(null);
   const dragMovedRef = useRef(false);
+
+  // Mobile jiggle edit mode (iOS-style): long-press to enter, drag to
+  // rearrange or merge, Done to exit.
+  const [editMode, setEditMode] = useState(false);
+  const [mobileDragId, setMobileDragId] = useState<string | null>(null);
+  const [mobileDragPos, setMobileDragPos] = useState({ x: 0, y: 0 });
+  const [mobileDropTarget, setMobileDropTarget] = useState<{ id: string; mode: 'merge' | 'before' | 'after' } | null>(null);
+  const tileRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const mobilePressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const mobilePressStartRef = useRef({ x: 0, y: 0 });
   const [resizingId, setResizingId] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -178,6 +188,87 @@ export function DashboardView() {
     }));
     updateWorkspace({ widgets: activeWorkspace.widgets.filter(w => w.id !== folderId).concat(popped) });
     if (openFolderId === folderId) setOpenFolderId(null);
+  };
+  /** Grid order on mobile: explicit mobileOrder first, else desktop (y, x). */
+  const getMobileGrid = () =>
+    activeWorkspace.widgets
+      .filter(w => w.type === 'icon' || w.type === 'folder')
+      .sort((a, b) => (a.mobileOrder ?? a.y * 10000 + a.x) - (b.mobileOrder ?? b.y * 10000 + b.x));
+
+  const reorderMobile = (draggedId: string, targetId: string, place: 'before' | 'after') => {
+    const dragged = activeWorkspace.widgets.find(w => w.id === draggedId);
+    if (!dragged) return;
+    const grid = getMobileGrid().filter(w => w.id !== draggedId);
+    let idx = grid.findIndex(w => w.id === targetId);
+    if (idx === -1) return;
+    if (place === 'after') idx += 1;
+    grid.splice(idx, 0, dragged);
+    const orderMap = new Map(grid.map((w, i) => [w.id, i]));
+    updateWorkspace({
+      widgets: activeWorkspace.widgets.map(w =>
+        orderMap.has(w.id) ? { ...w, mobileOrder: orderMap.get(w.id) } : w),
+    });
+  };
+
+  const mobileTileDown = (e: React.PointerEvent, id: string) => {
+    mobilePressStartRef.current = { x: e.clientX, y: e.clientY };
+    if (editMode) {
+      e.preventDefault();
+      setMobileDragId(id);
+      setMobileDragPos({ x: e.clientX, y: e.clientY });
+    } else {
+      mobilePressTimerRef.current = setTimeout(() => {
+        mobilePressTimerRef.current = null;
+        setEditMode(true);
+        if (navigator.vibrate) navigator.vibrate(15);
+      }, 450);
+    }
+  };
+
+  const mobileGridMove = (e: React.PointerEvent) => {
+    if (mobilePressTimerRef.current) {
+      const moved = Math.hypot(e.clientX - mobilePressStartRef.current.x, e.clientY - mobilePressStartRef.current.y);
+      if (moved > 10) {
+        clearTimeout(mobilePressTimerRef.current);
+        mobilePressTimerRef.current = null;
+      }
+    }
+    if (!mobileDragId) return;
+    e.preventDefault();
+    setMobileDragPos({ x: e.clientX, y: e.clientY });
+    let found: { id: string; mode: 'merge' | 'before' | 'after' } | null = null;
+    const draggedW = activeWorkspace.widgets.find(w => w.id === mobileDragId);
+    for (const [id, el] of Object.entries(tileRefs.current)) {
+      if (!el || id === mobileDragId) continue;
+      const r = el.getBoundingClientRect();
+      if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+        const relX = (e.clientX - r.left) / r.width;
+        const canMerge = draggedW?.type === 'icon';
+        if (canMerge && relX > 0.3 && relX < 0.7) {
+          found = { id, mode: 'merge' };
+        } else {
+          found = { id, mode: relX <= 0.5 ? 'before' : 'after' };
+        }
+        break;
+      }
+    }
+    setMobileDropTarget(found);
+  };
+
+  const mobileGridUp = () => {
+    if (mobilePressTimerRef.current) {
+      clearTimeout(mobilePressTimerRef.current);
+      mobilePressTimerRef.current = null;
+    }
+    if (mobileDragId && mobileDropTarget) {
+      if (mobileDropTarget.mode === 'merge') {
+        mergeIntoTarget(mobileDragId, mobileDropTarget.id);
+      } else {
+        reorderMobile(mobileDragId, mobileDropTarget.id, mobileDropTarget.mode);
+      }
+    }
+    setMobileDragId(null);
+    setMobileDropTarget(null);
   };
   // -------------------------------------------------------------------------
 
@@ -433,7 +524,7 @@ export function DashboardView() {
   // ---- Mobile: iOS-homescreen-style experience ---------------------------
   if (isMobile) {
     const sorted = [...activeWorkspace.widgets].sort((a, b) => (a.y - b.y) || (a.x - b.x));
-    const gridWidgets = sorted.filter(w => w.type === 'icon' || w.type === 'folder');
+    const gridWidgets = getMobileGrid();
     const stackWidgets = sorted.filter(w => w.type !== 'icon' && w.type !== 'folder');
 
     return (
@@ -448,6 +539,14 @@ export function DashboardView() {
           {/* Header */}
           <div className="flex items-center justify-between mb-3">
             <h1 className="text-xl font-extrabold text-gray-900 dark:text-white bg-white/20 dark:bg-black/20 px-2 py-1 rounded backdrop-blur-sm truncate mr-3">{activeWorkspace.name}</h1>
+            {editMode ? (
+              <button 
+                onClick={() => { setEditMode(false); setMobileDragId(null); setMobileDropTarget(null); }} 
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg shadow-lg font-bold text-sm active:scale-95 transition-transform shrink-0"
+              >
+                Done
+              </button>
+            ) : (
             <div className="relative shrink-0">
               <button 
                 onClick={(e) => { e.stopPropagation(); setShowAddWidgetMenu(!showAddWidgetMenu); }} 
@@ -465,6 +564,7 @@ export function DashboardView() {
                 </div>
               )}
             </div>
+            )}
           </div>
 
           {/* Workspace pills */}
@@ -489,13 +589,43 @@ export function DashboardView() {
 
           {/* Homescreen icon grid */}
           {gridWidgets.length > 0 && (
-            <div className="grid grid-cols-4 gap-3 mb-5">
+            <div 
+              className={`grid grid-cols-4 gap-3 mb-5 ${editMode ? 'touch-none select-none' : ''}`}
+              onPointerMove={mobileGridMove}
+              onPointerUp={mobileGridUp}
+              onPointerLeave={mobileGridUp}
+              onPointerCancel={mobileGridUp}
+            >
               {gridWidgets.map(widget => {
+                const isDragged = mobileDragId === widget.id;
+                const isMergeTarget = mobileDropTarget?.id === widget.id && mobileDropTarget.mode === 'merge';
+                const reorderEdge = mobileDropTarget?.id === widget.id && mobileDropTarget.mode !== 'merge' ? mobileDropTarget.mode : null;
+                const tileClass = `relative flex flex-col items-center ${editMode ? 'msec-jiggle' : ''} ${isDragged ? 'opacity-30' : ''} ${
+                  reorderEdge === 'before' ? 'shadow-[inset_3px_0_0_0_rgb(99,102,241)] rounded-l' : reorderEdge === 'after' ? 'shadow-[inset_-3px_0_0_0_rgb(99,102,241)] rounded-r' : ''
+                }`;
+                const removeBadge = editMode && (
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); if (widget.type === 'folder') { dissolveFolder(widget.id, e); } else { removeWidget(widget.id, e); } }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    title={widget.type === 'folder' ? 'Dissolve folder' : 'Remove icon'}
+                    className="absolute -top-1.5 -left-1.5 z-20 w-5 h-5 bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-slate-200 rounded-full shadow border border-gray-300 dark:border-slate-600 flex items-center justify-center leading-none text-sm font-bold"
+                  >
+                    –
+                  </button>
+                );
+
                 if (widget.type === 'folder') {
                   const children = widget.children || [];
                   return (
-                    <button key={widget.id} onClick={(e) => { e.stopPropagation(); setOpenFolderId(widget.id); }} className="flex flex-col items-center active:scale-95 transition-transform">
-                      <div className="relative w-14 h-14 bg-white/60 dark:bg-slate-800/60 rounded-2xl shadow-lg border border-gray-200 dark:border-slate-700 flex items-center justify-center mb-1 backdrop-blur-md">
+                    <div 
+                      key={widget.id} 
+                      ref={(el) => { tileRefs.current[widget.id] = el; }}
+                      onPointerDown={(e) => mobileTileDown(e, widget.id)}
+                      onClick={(e) => { e.stopPropagation(); if (!editMode) setOpenFolderId(widget.id); }}
+                      className={`${tileClass} ${!editMode ? 'active:scale-95 transition-transform cursor-pointer' : ''}`}
+                    >
+                      {removeBadge}
+                      <div className={`relative w-14 h-14 bg-white/60 dark:bg-slate-800/60 rounded-2xl shadow-lg border border-gray-200 dark:border-slate-700 flex items-center justify-center mb-1 backdrop-blur-md transition-all ${isMergeTarget ? 'ring-4 ring-indigo-400 scale-110 bg-indigo-50 dark:bg-indigo-900/60' : ''}`}>
                         <div className="grid grid-cols-2 gap-1">
                           {children.slice(0, 4).map(c => {
                             const CIcon = ICONS[c.iconName] || Briefcase;
@@ -505,13 +635,19 @@ export function DashboardView() {
                         {children.length > 4 && <div className="absolute -bottom-1.5 -right-1.5 bg-indigo-600 text-white text-[9px] font-bold rounded-full min-w-[18px] min-h-[18px] flex items-center justify-center shadow">{children.length}</div>}
                       </div>
                       <span className="text-[10px] font-semibold text-gray-800 dark:text-indigo-50 bg-white/70 dark:bg-black/50 px-1.5 py-0.5 rounded-full backdrop-blur-md truncate max-w-full">{widget.title}</span>
-                    </button>
+                    </div>
                   );
                 }
                 const IconComponent = ICONS[widget.iconName || 'Briefcase'] || Briefcase;
                 return (
-                  <div key={widget.id} className="flex flex-col items-center">
-                    <div className="w-14 h-14 bg-white/90 dark:bg-slate-800/90 rounded-2xl shadow-lg border border-gray-200 dark:border-slate-700 flex items-center justify-center mb-1 backdrop-blur-md">
+                  <div 
+                    key={widget.id} 
+                    ref={(el) => { tileRefs.current[widget.id] = el; }}
+                    onPointerDown={(e) => mobileTileDown(e, widget.id)}
+                    className={tileClass}
+                  >
+                    {removeBadge}
+                    <div className={`w-14 h-14 bg-white/90 dark:bg-slate-800/90 rounded-2xl shadow-lg border border-gray-200 dark:border-slate-700 flex items-center justify-center mb-1 backdrop-blur-md transition-all ${isMergeTarget ? 'ring-4 ring-indigo-400 scale-110 bg-indigo-50 dark:bg-indigo-900/60' : ''}`}>
                       <IconComponent className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
                     </div>
                     <span className="text-[10px] font-semibold text-gray-800 dark:text-indigo-50 bg-white/70 dark:bg-black/50 px-1.5 py-0.5 rounded-full backdrop-blur-md truncate max-w-full">{widget.title}</span>
@@ -647,6 +783,28 @@ export function DashboardView() {
             })}
           </div>
         </div>
+        {/* Floating clone of the tile being dragged */}
+        {mobileDragId && (() => {
+          const w = activeWorkspace.widgets.find(x => x.id === mobileDragId);
+          if (!w) return null;
+          const CIcon = ICONS[w.iconName || 'Briefcase'] || Briefcase;
+          return (
+            <div className="fixed z-[70] pointer-events-none -translate-x-1/2 -translate-y-1/2" style={{ left: mobileDragPos.x, top: mobileDragPos.y }}>
+              <div className="w-14 h-14 bg-white/95 dark:bg-slate-800/95 rounded-2xl shadow-2xl border border-indigo-300 dark:border-indigo-700 flex items-center justify-center scale-110">
+                {w.type === 'folder' ? (
+                  <div className="grid grid-cols-2 gap-1">
+                    {(w.children || []).slice(0, 4).map(c => {
+                      const FIcon = ICONS[c.iconName] || Briefcase;
+                      return <div key={c.id} className="w-5 h-5 rounded-md bg-white dark:bg-slate-700 flex items-center justify-center shadow-sm"><FIcon className="h-3 w-3 text-indigo-600 dark:text-indigo-400" /></div>;
+                    })}
+                  </div>
+                ) : (
+                  <CIcon className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+                )}
+              </div>
+            </div>
+          );
+        })()}
         {folderOverlay}
       </div>
     );

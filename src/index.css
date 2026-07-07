@@ -38,3 +38,13 @@
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #4B5563;
 }
+
+/* iOS-style jiggle for mobile dashboard edit mode */
+@keyframes msec-jiggle {
+  0% { transform: rotate(-1.5deg) scale(1.02); }
+  50% { transform: rotate(1.5deg) scale(1.02); }
+  100% { transform: rotate(-1.5deg) scale(1.02); }
+}
+.msec-jiggle { animation: msec-jiggle 0.28s infinite ease-in-out; }
+.msec-jiggle:nth-child(2n) { animation-duration: 0.33s; animation-delay: 0.06s; }
+.msec-jiggle:nth-child(3n) { animation-duration: 0.25s; animation-delay: 0.03s; }

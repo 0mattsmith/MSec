@@ -81,6 +81,7 @@ export interface DashboardWidget {
   cardId?: string;
   isCollapsed?: boolean;
   children?: { id: string; title: string; iconName: string }[]; // for 'folder' widgets
+  mobileOrder?: number; // grid position on the mobile homescreen layout
 }
 
 export interface Workspace {
