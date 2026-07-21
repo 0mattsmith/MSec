@@ -66,6 +66,21 @@ service cloud.firestore {
         allow delete: if isOwner(userId) && isValidId(emailId) && existing().userId == request.auth.uid;
       }
 
+      match /settings/kdf {
+        // Non-secret key-derivation parameters (salt, iterations, verifier)
+        // published by the app so the browser extension can unlock. Contains
+        // no key material recoverable without the master password.
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && incoming().keys().hasOnly(['v', 'salt', 'iterations', 'verifier', 'updatedAt'])
+          && incoming().v is number
+          && incoming().salt is string && incoming().salt.size() <= 64
+          && incoming().iterations is number && incoming().iterations >= 100000
+          && incoming().verifier is string && incoming().verifier.size() <= 256
+          && (!('updatedAt' in incoming()) || incoming().updatedAt is number);
+        allow delete: if isOwner(userId);
+      }
+
       match /settings/private {
         allow read: if isOwner(userId);
         allow create: if isOwner(userId) && isValidUserSettings(incoming());

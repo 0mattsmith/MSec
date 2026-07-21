@@ -44,6 +44,14 @@ Consequences worth knowing: there is no password recovery (losing the master pas
 
 Source layout: `src/lib/crypto.ts` (key derivation and encrypt/decrypt), `src/store/VaultContext.tsx` (vault state, persistence, Firestore sync), `firestore.rules` (server-side enforcement).
 
+## Browser extension (Chrome & Firefox)
+
+The `extension/` folder is a WebExtension that puts an MSec icon inside login fields on any website — click it to autofill saved credentials for that site or to create (and optionally generate) a new login, which syncs straight into your encrypted vault. It uses the same zero-knowledge model: it signs into Firebase with your Google account, downloads encrypted blobs, and decrypts them locally after you enter your master password. The derived key lives only in memory-backed session storage and auto-locks after 10 minutes of inactivity.
+
+One-time setup: in Google Cloud Console (same Firebase project) create an OAuth 2.0 "Web application" client, add the redirect URI the extension popup shows you (Chrome: `https://<extension-id>.chromiumapp.org/`; Firefox shows its own), and paste the client ID into `extension/config.js`. Also open the MSec app once while signed in — it publishes the non-secret key-derivation settings the extension needs, and deploy the updated Firestore rules.
+
+Loading it: Chrome → `chrome://extensions` → Developer mode → "Load unpacked" → select `extension/`. Firefox → `about:debugging#/runtime/this-firefox` → "Load Temporary Add-on" → pick `extension/manifest.json` (permanent install requires signing via addons.mozilla.org). To make MSec your de-facto default manager, disable the browser's built-in offers: Chrome → Settings → Autofill → Google Password Manager → turn off "Offer to save passwords"; Firefox → Settings → Privacy & Security → uncheck "Ask to save passwords".
+
 ## Firebase deployment
 
 The web app config in `firebase-applet-config.json` is public by design (Firebase web API keys are not secrets; access is controlled by the rules). After changing `firestore.rules`, deploy them:

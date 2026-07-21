@@ -198,6 +198,22 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     };
   }, [currentUser, state.isUnlocked]);
 
+  // Publish the (non-secret) key-derivation config so the browser extension
+  // can derive the vault key after Google sign-in. This contains only salt,
+  // iteration count and the verifier blob — never the password or key.
+  useEffect(() => {
+    if (!currentUser || !state.isUnlocked) return;
+    const kdf = readKdfConfig();
+    if (!kdf) return;
+    setDoc(doc(db, `users/${currentUser.uid}/settings/kdf`), {
+      v: kdf.v,
+      salt: kdf.salt,
+      iterations: kdf.iterations,
+      verifier: kdf.verifier,
+      updatedAt: Date.now(),
+    }).catch((e) => console.warn('Failed to publish KDF config', e));
+  }, [currentUser, state.isUnlocked]);
+
   /** Write an item to Firestore as an encrypted blob. */
   const putItemDoc = async (item: VaultItem) => {
     if (!currentUser || !keyRef.current) return;

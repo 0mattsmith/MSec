@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "MSec Password Manager",
+  "version": "0.1.0",
+  "description": "Autofill and save logins with MSec - your zero-knowledge password manager.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js",
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": ["storage", "alarms", "identity"],
+  "host_permissions": [
+    "https://identitytoolkit.googleapis.com/*",
+    "https://securetoken.googleapis.com/*",
+    "https://firestore.googleapis.com/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/icon-32.png"],
+      "matches": ["http://*/*", "https://*/*"]
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "msec@msec.vault",
+      "strict_min_version": "115.0"
+    }
+  }
+}
