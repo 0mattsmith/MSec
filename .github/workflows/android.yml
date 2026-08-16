@@ -1,10 +1,16 @@
-# EXPERIMENTAL: builds an unsigned debug APK via Tauri's Android support.
-# Run manually from the Actions tab. For a signed release APK/AAB you'll
-# need to add a keystore and signing config later.
+# Builds a debug APK via Tauri's Android support and — when triggered by a
+# version tag — attaches it to that tag's GitHub Release so it can be
+# downloaded straight onto a phone. Debug-signed: fine for sideloading,
+# not for Play Store. A signed release APK/AAB needs a keystore later.
 name: Build Android APK (debug)
 
 on:
+  push:
+    tags: ["v*"]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   android:
@@ -51,3 +57,24 @@ jobs:
         with:
           name: msec-android-debug-apk
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+
+      # Give the APK a predictable, version-stamped filename.
+      - name: Collect APK
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          mkdir -p release
+          APK=$(find src-tauri/gen/android/app/build/outputs/apk -name "*.apk" | head -1)
+          cp "$APK" "release/MSec-${{ github.ref_name }}-android-debug.apk"
+          ls -la release/
+
+      # Attach to the same (draft) release the desktop workflow creates.
+      - name: Attach APK to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "MSec ${{ github.ref_name }}"
+          draft: true
+          files: release/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,7 +1,7 @@
 {
   "name": "msec",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
@@ -11,7 +11,8 @@
     "lint": "tsc --noEmit",
     "test:crypto": "tsx test-crypto.ts",
     "tauri": "tauri",
-    "test:restore": "tsx test-restore.ts"
+    "test:restore": "tsx test-restore.ts",
+    "test:detect": "node extension/detect-test.cjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -47,3 +48,4 @@
     "vite": "^6.2.3"
   }
 }
+

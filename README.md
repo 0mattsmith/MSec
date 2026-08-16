@@ -27,7 +27,7 @@ MSec is a PWA plus native desktop/Android builds via Tauri:
 
 - **Web / PWA** — deployed to GitHub Pages automatically on every push to `main` (`.github/workflows/deploy-pages.yml`). One-time setup: repo Settings → Pages → Source: "GitHub Actions". The app is installable (manifest + service worker) and works offline once loaded.
 - **Windows, macOS (Universal), Linux** — push a version tag (`git tag v0.1.0 && git push origin v0.1.0`) and `.github/workflows/release-desktop.yml` builds installers for all three and attaches them to a draft GitHub Release.
-- **Android** — experimental: run the "Build Android APK (debug)" workflow manually from the Actions tab to get an unsigned debug APK artifact. A signed release build needs a keystore added later.
+- **Android** — pushing a version tag also builds a debug-signed APK and attaches it to the same draft release (`MSec-v0.1.0-android-debug.apk`), so it can be downloaded directly onto a phone. You can also run the workflow manually from the Actions tab for an artifact-only build. Debug signing is fine for sideloading; a Play Store release needs a keystore added later.
 - **iOS** — no native build; install as a PWA (Safari → Share → Add to Home Screen). PWA limitations on iOS: no true biometric unlock integration, service worker storage can be evicted by the OS if the app is unused for weeks (your vault stays safe in Firestore if you use sync), and clipboard auto-clear timing is less reliable in the background.
 
 To develop the desktop app locally: `npm install`, then `npx tauri icon public/icons/icon-1024.png` once, then `npm run tauri dev` (requires Rust).
