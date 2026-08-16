@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useVault } from '../store/VaultContext';
-import { Lock, Fingerprint, Key, Eye, EyeOff } from 'lucide-react';
+import { Lock, Fingerprint, Key, Eye, EyeOff, Cloud } from 'lucide-react';
 
 export function LockScreen() {
-  const { unlock, unlockWithBiometric, masterPasswordSet, setMasterPassword } = useVault();
+  const { unlock, unlockWithBiometric, masterPasswordSet, setMasterPassword, signInWithGoogle, currentUser, remoteVaultAvailable } = useVault();
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(false);
@@ -39,9 +39,11 @@ export function LockScreen() {
             {masterPasswordSet ? 'Unlock MSec' : 'Welcome to MSec'}
           </h1>
           <p className="text-center text-sm text-gray-500 dark:text-slate-400">
-            {masterPasswordSet 
-              ? 'Enter your master password to access your vault.' 
-              : 'Create a master password. This is the only way to access your data.'}
+            {remoteVaultAvailable
+              ? 'Existing vault found for this account. Enter the master password you use on your other devices.'
+              : masterPasswordSet 
+                ? 'Enter your master password to access your vault.' 
+                : 'Create a master password. This is the only way to access your data.'}
           </p>
         </div>
 
@@ -79,6 +81,22 @@ export function LockScreen() {
             {busy ? 'Decrypting…' : masterPasswordSet ? 'Unlock Vault' : 'Create Vault'}
           </button>
         </form>
+
+        {!masterPasswordSet && !currentUser && (
+          <div className="mt-8 flex flex-col items-center space-y-3 border-t border-gray-100 pt-6 dark:border-slate-800">
+            <p className="text-center text-xs text-gray-500 dark:text-slate-400">
+              Already use MSec on another device?
+            </p>
+            <button
+              type="button"
+              onClick={() => signInWithGoogle()}
+              className="flex items-center space-x-2 rounded-md border border-gray-200 py-2 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800/50"
+            >
+              <Cloud className="h-4 w-4 opacity-70" />
+              <span>Sign in to restore your vault</span>
+            </button>
+          </div>
+        )}
 
         {masterPasswordSet && (
           <div className="mt-8 flex flex-col items-center space-y-4 border-t border-gray-100 pt-6 dark:border-slate-800">

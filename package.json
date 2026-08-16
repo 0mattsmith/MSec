@@ -10,7 +10,8 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test:crypto": "tsx test-crypto.ts",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test:restore": "tsx test-restore.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

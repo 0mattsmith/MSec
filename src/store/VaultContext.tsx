@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { AppState, VaultItem, VaultFolder, MaskedEmail, Workspace } from '../types';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
-import { collection, doc, setDoc, deleteDoc, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, deleteDoc, onSnapshot, query, where } from 'firebase/firestore';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import {
   createKdfConfig,
@@ -126,6 +126,8 @@ interface VaultContextType extends AppState {
   addMaskedEmail: (masked: string, forwardTo: string, label: string) => void;
   deleteMaskedEmail: (id: string) => void;
   updateWorkspaces: (workspaces: Workspace[]) => void;
+  /** True when this device has no local vault but the signed-in account has one in the cloud. */
+  remoteVaultAvailable: boolean;
   currentUser: any;
   signInWithGoogle: () => Promise<void>;
   signOutUser: () => Promise<void>;
@@ -142,6 +144,12 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
   // sign-out / clear. A page reload always requires the master password.
   const keyRef = useRef<CryptoKey | null>(null);
 
+  // On a device that has never held this vault, the key-derivation config
+  // (salt/iterations/verifier) is fetched from Firestore after sign-in so the
+  // same master password derives the same key. Without this the device would
+  // generate a fresh salt and be unable to decrypt synced data.
+  const [remoteKdf, setRemoteKdf] = useState<KdfConfig | null>(null);
+
   const updateState = (updates: Partial<AppState>) => {
     setState((prev) => ({ ...prev, ...updates }));
   };
@@ -152,6 +160,25 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     });
     return () => unsubscribe();
   }, []);
+
+  // Fresh-device restore: pull the published KDF config for this account.
+  useEffect(() => {
+    if (!currentUser || readKdfConfig()) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, `users/${currentUser.uid}/settings/kdf`));
+        if (cancelled || !snap.exists()) return;
+        const data = snap.data() as KdfConfig;
+        if (!data?.salt || !data?.verifier || !data?.iterations) return;
+        setRemoteKdf({ v: 1, salt: data.salt, iterations: data.iterations, verifier: data.verifier });
+        updateState({ masterPasswordSet: true }); // prompt to unlock, not to create
+      } catch (e) {
+        console.warn('Could not fetch remote vault key config', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [currentUser]);
 
   // ---------- Firestore sync (encrypted blobs only) ----------
 
@@ -312,14 +339,18 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
   // ---------- Lock / unlock ----------
 
   const unlock = async (password: string): Promise<boolean> => {
-    const kdf = readKdfConfig();
+    const localKdf = readKdfConfig();
+    const kdf = localKdf ?? remoteKdf;
 
     if (kdf) {
       const key = await unlockVaultKey(password, kdf);
       if (!key) return false;
       keyRef.current = key;
+      // First unlock on a new device: adopt the account's key config locally
+      // so the vault also opens offline from now on.
+      if (!localKdf) localStorage.setItem(LS_KDF, JSON.stringify(kdf));
       await loadVaultIntoState(key);
-      updateState({ isUnlocked: true });
+      updateState({ isUnlocked: true, masterPasswordSet: true });
       return true;
     }
 
@@ -531,6 +562,8 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
         },
 
         updateWorkspaces: (workspaces) => updateState({ workspaces }),
+
+        remoteVaultAvailable: !!remoteKdf && !readKdfConfig(),
       }}
     >
       {children}
