@@ -1,8 +1,14 @@
-# Builds a debug APK via Tauri's Android support and — when triggered by a
-# version tag — attaches it to that tag's GitHub Release so it can be
-# downloaded straight onto a phone. Debug-signed: fine for sideloading,
-# not for Play Store. A signed release APK/AAB needs a keystore later.
-name: Build Android APK (debug)
+# Builds the Android APK and, on a version tag, attaches it to that tag's
+# GitHub Release.
+#
+# Signed release build (~15 MB) when these repo secrets exist:
+#   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS
+# Create them with:  .\new-keystore.ps1
+#
+# Without those secrets it falls back to a debug build, which is much larger.
+# Either way only arm64-v8a is built — every phone from ~2015 onwards, and a
+# quarter the size of bundling all four ABIs.
+name: Build Android APK
 
 on:
   push:
@@ -28,10 +34,10 @@ jobs:
       - name: Install NDK
         run: sdkmanager "ndk;26.1.10909125"
 
-      - name: Install Rust with Android targets
+      - name: Install Rust with Android target
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+          targets: aarch64-linux-android
 
       - uses: actions/setup-node@v4
         with:
@@ -48,26 +54,66 @@ jobs:
         env:
           NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
 
-      - name: Build debug APK
-        run: npx tauri android build --debug --apk
+      - name: Decide build mode
+        id: mode
+        run: |
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "signed=true" >> $GITHUB_OUTPUT
+            echo "Building SIGNED RELEASE APK"
+          else
+            echo "signed=false" >> $GITHUB_OUTPUT
+            echo "::warning::No signing secrets found - building a debug APK (large). Run new-keystore.ps1 to enable release builds."
+          fi
+
+      # Release build: optimised and stripped, ~15 MB for one ABI.
+      - name: Build release APK (arm64)
+        if: steps.mode.outputs.signed == 'true'
+        run: npx tauri android build --apk --target aarch64
         env:
           NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: msec-android-debug-apk
-          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+      - name: Build debug APK (arm64)
+        if: steps.mode.outputs.signed != 'true'
+        run: npx tauri android build --debug --apk --target aarch64
+        env:
+          NDK_HOME: ${{ env.ANDROID_SDK_ROOT }}/ndk/26.1.10909125
 
-      # Give the APK a predictable, version-stamped filename.
-      - name: Collect APK
-        if: startsWith(github.ref, 'refs/tags/')
+      # Sign with apksigner directly — avoids patching generated Gradle files.
+      - name: Sign APK
+        if: steps.mode.outputs.signed == 'true'
+        run: |
+          set -e
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/keystore"
+          BUILD_TOOLS=$(ls -1 "$ANDROID_HOME/build-tools" | sort -V | tail -1)
+          TOOLS="$ANDROID_HOME/build-tools/$BUILD_TOOLS"
+          UNSIGNED=$(find src-tauri/gen/android -name "*.apk" | grep -i -E "release" | head -1)
+          echo "Signing: $UNSIGNED"
+          mkdir -p release
+          "$TOOLS/zipalign" -p -f 4 "$UNSIGNED" release/aligned.apk
+          "$TOOLS/apksigner" sign \
+            --ks "$RUNNER_TEMP/keystore" \
+            --ks-pass "pass:${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+            --key-pass "pass:${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+            --ks-key-alias "${{ secrets.ANDROID_KEY_ALIAS }}" \
+            --out "release/MSec-${{ github.ref_name }}-android.apk" \
+            release/aligned.apk
+          rm -f release/aligned.apk "$RUNNER_TEMP/keystore"
+          "$TOOLS/apksigner" verify --print-certs "release/MSec-${{ github.ref_name }}-android.apk"
+          ls -lh release/
+
+      - name: Collect debug APK
+        if: steps.mode.outputs.signed != 'true'
         run: |
           mkdir -p release
-          APK=$(find src-tauri/gen/android/app/build/outputs/apk -name "*.apk" | head -1)
+          APK=$(find src-tauri/gen/android -name "*.apk" | head -1)
           cp "$APK" "release/MSec-${{ github.ref_name }}-android-debug.apk"
-          ls -la release/
+          ls -lh release/
 
-      # Attach to the same (draft) release the desktop workflow creates.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: msec-android-apk
+          path: release/*.apk
+
       - name: Attach APK to release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2

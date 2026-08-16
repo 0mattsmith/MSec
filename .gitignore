@@ -9,3 +9,10 @@ coverage/
 src-tauri/target/
 src-tauri/gen/
 src-tauri/icons/
+
+# Android signing — NEVER commit these
+*.jks
+*.pfx
+*.keystore
+keystore-base64.txt
+keystore.properties
