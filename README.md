@@ -40,7 +40,13 @@ MSec is zero-knowledge: your master password, and anything derived from it, neve
 
 The master password is run through PBKDF2-SHA256 (600,000 iterations, random 16-byte salt) to derive an AES-256-GCM vault key. The key is held in memory only — it is never written to disk, localStorage, or Firestore. Unlocking is verified by decrypting a stored verifier blob rather than comparing any password hash. All vault data (items, folders, masked emails) is encrypted client-side before it is persisted anywhere: locally as a single encrypted blob (`msec_vault`), and in Firestore as one opaque blob per document. The Firestore security rules enforce this with `hasOnly()` — a write containing any plaintext vault field is rejected by the server.
 
-Consequences worth knowing: there is no password recovery (losing the master password means losing the vault), and biometric quick-unlock only works while the key is still in memory (after a soft lock in the same session). A page reload or sign-out always requires the master password.
+**Biometric unlock** (fingerprint, face, Windows Hello) uses WebAuthn's PRF extension: the authenticator derives a secret only it can reproduce, and that secret encrypts the vault key at rest. The master password is never stored, and the wrapped key is useless on any other device. Where PRF isn't supported, MSec declines to enable biometrics rather than falling back to something weaker.
+
+**Auto-lock** clears the key from memory after a configurable idle period (default 5 minutes), and repeated failed unlock attempts trigger a growing cooldown (5s, 15s, 45s… capped at 30 minutes) that survives restarting the app.
+
+**Backups.** Settings → Encrypted backup downloads a `.msecvault` file: your whole vault encrypted with your master password, safe to keep in cloud storage. Restoring needs the password that was in force when the backup was made. A plaintext export exists for migrating to another manager, but it's deliberately buried behind a warning — it contains every password in readable form.
+
+Consequences worth knowing: there is no password recovery (losing the master password means losing the vault, which is why backups matter), and restoring a backup replaces the vault on that device and clears biometric enrolment.
 
 Source layout: `src/lib/crypto.ts` (key derivation and encrypt/decrypt), `src/store/VaultContext.tsx` (vault state, persistence, Firestore sync), `firestore.rules` (server-side enforcement).
 

@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useVault } from '../store/VaultContext';
 import { Lock, Fingerprint, Key, Eye, EyeOff, Cloud, ShieldAlert, Check } from 'lucide-react';
 import { checkPasswordStrength } from '../lib/utils';
 import { UpdateBanner } from './UpdateBanner';
+import { lockoutRemainingMs, formatDuration, failedAttemptCount } from '../lib/lockout';
 
 const INPUT_CLASS =
   'w-full rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-gray-900 placeholder-gray-400 ' +
@@ -22,6 +23,14 @@ export function LockScreen() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
+  const [cooldownMs, setCooldownMs] = useState(lockoutRemainingMs());
+
+  // Tick the cooldown down so the user can see when they may try again.
+  useEffect(() => {
+    if (cooldownMs <= 0) return;
+    const id = setInterval(() => setCooldownMs(lockoutRemainingMs()), 500);
+    return () => clearInterval(id);
+  }, [cooldownMs > 0]);
 
   // Creating a brand-new vault (not unlocking, not restoring from cloud).
   const isCreating = !masterPasswordSet && !remoteVaultAvailable;
@@ -40,6 +49,8 @@ export function LockScreen() {
       if (!acknowledged) { setError('Please confirm you understand it cannot be recovered.'); return; }
     }
 
+    if (cooldownMs > 0) return;
+
     setBusy(true);
     try {
       if (isCreating) {
@@ -47,8 +58,12 @@ export function LockScreen() {
       } else {
         const success = await unlock(password);
         if (!success) {
-          setError('Incorrect master password');
-          setTimeout(() => setError(''), 3000);
+          const remaining = lockoutRemainingMs();
+          setCooldownMs(remaining);
+          setError(remaining > 0
+            ? `Incorrect password — too many attempts`
+            : 'Incorrect master password');
+          if (remaining === 0) setTimeout(() => setError(''), 3000);
         }
       }
     } finally {
@@ -154,12 +169,21 @@ export function LockScreen() {
             <p className="text-xs font-bold uppercase tracking-wider text-red-500">{error}</p>
           )}
 
+          {cooldownMs > 0 && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-500/20 dark:bg-red-500/10">
+              <p className="text-xs text-red-800 dark:text-red-300">
+                After {failedAttemptCount()} failed attempts, unlocking is paused for{' '}
+                <span className="font-bold">{formatDuration(cooldownMs)}</span>.
+              </p>
+            </div>
+          )}
+
           <button
             type="submit"
-            disabled={busy || (isCreating && !canCreate)}
+            disabled={busy || cooldownMs > 0 || (isCreating && !canCreate)}
             className="w-full rounded-md bg-indigo-600 py-3 text-sm font-bold uppercase tracking-wider text-white shadow-lg shadow-indigo-500/20 transition-all hover:bg-indigo-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {busy ? 'Encrypting…' : isCreating ? 'Create vault' : 'Unlock vault'}
+            {busy ? 'Encrypting…' : cooldownMs > 0 ? `Wait ${formatDuration(cooldownMs)}` : isCreating ? 'Create vault' : 'Unlock vault'}
           </button>
         </form>
 

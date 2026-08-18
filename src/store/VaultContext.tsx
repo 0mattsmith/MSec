@@ -11,6 +11,9 @@ import {
   decryptJson,
   type KdfConfig,
 } from '../lib/crypto';
+import { createBackup, restoreBackup, type VaultPayload as BackupPayload } from '../lib/backup';
+import { clearFailedUnlocks, recordFailedUnlock } from '../lib/lockout';
+import { APP_VERSION } from '../lib/updater';
 import {
   biometricAvailable,
   biometricEnrolled,
@@ -41,6 +44,7 @@ const defaultState: AppState = {
   theme: 'dark',
   settings: {
     clipboardClearTimeoutSeconds: 30,
+    autoLockMinutes: 5,
   },
   items: [],
   folders: [],
@@ -117,6 +121,10 @@ interface VaultContextType extends AppState {
   /** Enrol this device's fingerprint / face / Windows Hello. Needs the master password again. */
   enableBiometric: (masterPassword: string) => Promise<{ ok: boolean; error?: string }>;
   turnOffBiometric: () => void;
+  /** Serialise the unlocked vault into an encrypted backup file. */
+  exportBackup: () => Promise<{ ok: boolean; text?: string; error?: string }>;
+  /** Replace this device's vault with the contents of a backup file. */
+  importBackup: (fileText: string, masterPassword: string) => Promise<{ ok: boolean; error?: string; itemCount?: number }>;
   biometricReady: boolean;
   biometricSupported: boolean;
   lock: () => void;
@@ -168,6 +176,33 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     biometricAvailable().then(setBiometricSupported);
   }, []);
+
+  // Auto-lock after inactivity. The key is purged, so returning requires the
+  // master password (or biometrics) again.
+  const autoLockTimer = useRef<any>(null);
+  useEffect(() => {
+    const minutes = state.settings.autoLockMinutes ?? 5;
+    if (!state.isUnlocked || minutes <= 0) return;
+
+    const reset = () => {
+      if (autoLockTimer.current) clearTimeout(autoLockTimer.current);
+      autoLockTimer.current = setTimeout(() => {
+        keyRef.current = null;
+        setState((prev) => ({ ...prev, isUnlocked: false, selectedItemId: null }));
+      }, minutes * 60 * 1000);
+    };
+
+    const events = ['pointerdown', 'keydown', 'touchstart', 'focus'];
+    events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
+    document.addEventListener('visibilitychange', reset);
+    reset();
+
+    return () => {
+      if (autoLockTimer.current) clearTimeout(autoLockTimer.current);
+      events.forEach((e) => window.removeEventListener(e, reset));
+      document.removeEventListener('visibilitychange', reset);
+    };
+  }, [state.isUnlocked, state.settings.autoLockMinutes]);
 
   const updateState = (updates: Partial<AppState>) => {
     setState((prev) => ({ ...prev, ...updates }));
@@ -363,7 +398,8 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
 
     if (kdf) {
       const key = await unlockVaultKey(password, kdf);
-      if (!key) return false;
+      if (!key) { recordFailedUnlock(); return false; }
+      clearFailedUnlocks();
       keyRef.current = key;
       // First unlock on a new device: adopt the account's key config locally
       // so the vault also opens offline from now on.
@@ -376,7 +412,8 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     // Legacy migration: plaintext master password from the pre-encryption app.
     const legacyMp = localStorage.getItem(LS_LEGACY_MP);
     if (legacyMp !== null) {
-      if (legacyMp !== password) return false;
+      if (legacyMp !== password) { recordFailedUnlock(); return false; }
+      clearFailedUnlocks();
       await migrateToEncrypted(password);
       return true;
     }
@@ -422,6 +459,7 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     const result = await biometricUnlock(kdf);
     if (!result.ok || !result.key) return { ok: false, error: result.error };
 
+    clearFailedUnlocks();
     keyRef.current = result.key;
     if (!readKdfConfig()) localStorage.setItem(LS_KDF, JSON.stringify(kdf));
     await loadVaultIntoState(result.key);
@@ -448,6 +486,50 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
   const turnOffBiometric = () => {
     disableBiometric();
     setBiometricReady(false);
+  };
+
+  const exportBackup = async (): Promise<{ ok: boolean; text?: string; error?: string }> => {
+    const kdf = readKdfConfig() ?? remoteKdf;
+    if (!keyRef.current || !kdf) return { ok: false, error: 'Unlock the vault before exporting.' };
+    try {
+      const text = await createBackup(keyRef.current, kdf, {
+        items: state.items,
+        folders: state.folders,
+        maskedEmails: state.maskedEmails,
+        workspaces: state.workspaces,
+      } as BackupPayload, APP_VERSION);
+      return { ok: true, text };
+    } catch (e: any) {
+      return { ok: false, error: e?.message || 'Could not create the backup.' };
+    }
+  };
+
+  const importBackup = async (fileText: string, masterPassword: string) => {
+    const result = await restoreBackup(fileText, masterPassword);
+    if (!result.ok || !result.payload || !result.kdf) {
+      return { ok: false, error: result.error };
+    }
+
+    // Adopt the backup's key settings so the vault opens with the password
+    // that was in force when it was made.
+    const key = await unlockVaultKey(masterPassword, result.kdf);
+    if (!key) return { ok: false, error: 'Could not derive the key from this backup.' };
+
+    keyRef.current = key;
+    localStorage.setItem(LS_KDF, JSON.stringify(result.kdf));
+    // Biometric enrolment wraps the *old* key, so it no longer applies.
+    disableBiometric();
+    setBiometricReady(false);
+
+    updateState({
+      items: (result.payload.items as any) ?? [],
+      folders: (result.payload.folders as any) ?? [],
+      maskedEmails: (result.payload.maskedEmails as any) ?? [],
+      workspaces: (result.payload.workspaces as any) ?? [],
+      isUnlocked: true,
+      masterPasswordSet: true,
+    });
+    return { ok: true, itemCount: (result.payload.items as any)?.length ?? 0 };
   };
 
   const lock = () => updateState({ isUnlocked: false, selectedItemId: null });
@@ -597,6 +679,8 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
         remoteVaultAvailable: !!remoteKdf && !readKdfConfig(),
         enableBiometric,
         turnOffBiometric,
+        exportBackup,
+        importBackup,
         biometricReady,
         biometricSupported,
       }}

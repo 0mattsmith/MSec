@@ -101,6 +101,7 @@ export interface GeneratorOptions {
 
 export interface AppSettings {
   clipboardClearTimeoutSeconds: number; // 0 means disabled
+  autoLockMinutes?: number; // 0 means never
 }
 
 export interface AppState {

@@ -122,6 +122,17 @@ export async function applyUpdate(info: UpdateInfo, platform: Platform): Promise
   }
 
   const target = platform === 'android' && info.apkUrl ? info.apkUrl : info.url;
+
+  // Inside the Tauri webview, window.open is intercepted and the link can
+  // silently do nothing — the opener plugin hands the URL to the OS browser,
+  // which then downloads the APK / installer as normal.
+  try {
+    const { openUrl } = await import('@tauri-apps/plugin-opener');
+    await openUrl(target);
+    return;
+  } catch {
+    /* not a Tauri build, or the plugin is unavailable — fall through */
+  }
   window.open(target, '_blank', 'noopener,noreferrer');
 }
 
