@@ -64,7 +64,7 @@ export function LockScreen() {
       : 'Enter your master password to access your vault.';
 
   return (
-    <div className="flex min-h-screen w-full flex-col items-center justify-center bg-gray-50 p-4 dark:bg-[#0F1115] transition-colors">
+    <div className="flex min-h-[100dvh] w-full flex-col items-center justify-center overflow-y-auto bg-gray-50 p-4 dark:bg-[#0F1115] transition-colors safe-all">
       <div className="w-full max-w-md rounded-2xl border border-gray-100 bg-white p-8 shadow-2xl shadow-indigo-500/5 dark:border-slate-800 dark:bg-[#15191F]">
         <div className="mb-8 flex flex-col items-center justify-center space-y-4">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg">

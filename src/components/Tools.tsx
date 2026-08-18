@@ -32,7 +32,7 @@ export function PasswordHealthTool() {
    const issuesDisplay = Array.from(new Set([...weak, ...reused]));
 
    return (
-     <div className="mx-auto max-w-2xl w-full p-8">
+     <div className="mx-auto max-w-2xl w-full p-8 pb-safe-nav md:pb-8">
        <div className="mb-8 flex items-center space-x-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400">
                <AlertTriangle className="h-6 w-6" />
@@ -117,7 +117,7 @@ export function PasswordGeneratorTool() {
   );
 
   return (
-    <div className="mx-auto max-w-2xl w-full p-8">
+    <div className="mx-auto max-w-2xl w-full p-8 pb-safe-nav md:pb-8">
       <div className="mb-8 flex items-center space-x-3">
          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400">
             <Shield className="h-6 w-6" />
@@ -197,7 +197,7 @@ export function EmailMaskingTool() {
    };
 
    return (
-     <div className="mx-auto max-w-2xl w-full p-8">
+     <div className="mx-auto max-w-2xl w-full p-8 pb-safe-nav md:pb-8">
        <div className="mb-8 flex items-center justify-between">
          <div className="flex items-center space-x-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
@@ -300,7 +300,7 @@ export function BreachScannerTool() {
    };
 
    return (
-     <div className="mx-auto max-w-2xl w-full p-8">
+     <div className="mx-auto max-w-2xl w-full p-8 pb-safe-nav md:pb-8">
        <div className="mb-8 flex items-center space-x-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400">
                <ShieldAlert className="h-6 w-6" />

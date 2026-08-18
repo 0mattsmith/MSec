@@ -535,7 +535,7 @@ export function DashboardView() {
           <div className={`fixed inset-0 ${activeWorkspace.wallpaper || 'bg-gradient-to-br from-indigo-50 to-pink-50 dark:from-[#0F1115] dark:to-[#18122B]'}`} />
         )}
 
-        <div className="relative z-10 p-4 pb-28">
+        <div className="relative z-10 p-4 pb-safe-nav">
           {/* Header */}
           <div className="flex items-center justify-between mb-3">
             <h1 className="text-xl font-extrabold text-gray-900 dark:text-white bg-white/20 dark:bg-black/20 px-2 py-1 rounded backdrop-blur-sm truncate mr-3">{activeWorkspace.name}</h1>

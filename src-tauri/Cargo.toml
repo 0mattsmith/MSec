@@ -1,6 +1,6 @@
 [package]
 name = "msec"
-version = "0.1.4"
+version = "0.1.5"
 description = "Secure, all-in-one password manager and authenticator"
 edition = "2021"
 

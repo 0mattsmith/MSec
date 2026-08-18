@@ -10,7 +10,7 @@ export function BottomNavigation({ className }: { className?: string }) {
   const isTools = ['generator', 'emails', 'health', 'scanner'].includes(activeCategory || '');
 
   return (
-    <div className={cn("fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-[#1A1F26] border-t border-gray-200 dark:border-slate-800 pb-2 shadow-xl", className)}>
+    <div className={cn("fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-[#1A1F26] border-t border-gray-200 dark:border-slate-800 shadow-xl safe-bottom safe-x", className)}>
        <div className="flex justify-around items-center h-16 w-full max-w-md mx-auto px-2">
          <button 
            onClick={() => setActiveCategory('all')} 

@@ -37,7 +37,7 @@ export function AuthenticatorView() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto p-8 pb-safe-nav md:pb-8 custom-scrollbar">
         <div className="max-w-4xl mx-auto">
           {totpItems.length === 0 ? (
             <div className="text-center py-20 text-gray-500 dark:text-slate-500">

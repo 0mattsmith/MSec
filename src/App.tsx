@@ -14,7 +14,7 @@ function VaultApp() {
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-white text-gray-900 transition-colors duration-200 dark:bg-[#0F1115] dark:text-slate-200 flex-col md:flex-row">
+    <div className="flex h-[100dvh] w-full overflow-hidden bg-white text-gray-900 transition-colors duration-200 dark:bg-[#0F1115] dark:text-slate-200 flex-col md:flex-row safe-top safe-x">
       <div className="hidden md:flex h-full">
          <Sidebar />
       </div>

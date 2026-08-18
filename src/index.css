@@ -19,11 +19,42 @@
   }
   body {
     @apply h-full w-full m-0 bg-gray-50 text-gray-900 transition-colors duration-200;
+    /* The app draws edge-to-edge (viewport-fit=cover), so nothing may sit
+       flush against the screen edges without accounting for the status bar,
+       gesture/nav bar and any display cutout. */
+    --msec-safe-top: env(safe-area-inset-top, 0px);
+    --msec-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --msec-safe-left: env(safe-area-inset-left, 0px);
+    --msec-safe-right: env(safe-area-inset-right, 0px);
+    /* Bottom nav is 4rem tall; content above it must clear both. */
+    --msec-navbar-height: 4rem;
+    overscroll-behavior-y: none; /* no rubber-banding under the system bars */
   }
   html.dark body {
     @apply bg-[#0F1115] text-slate-200;
   }
 }
+
+/* Inside the Tauri app the WebView sometimes reports zero insets even though
+   it is drawing under the status and gesture bars. Enforce a sane floor there
+   so the UI is never flush against them. */
+html.msec-native body {
+  --msec-safe-top: max(env(safe-area-inset-top, 0px), 28px);
+  --msec-safe-bottom: max(env(safe-area-inset-bottom, 0px), 16px);
+}
+
+/* --- Safe-area helpers ---------------------------------------------------- */
+.safe-top    { padding-top: var(--msec-safe-top); }
+.safe-bottom { padding-bottom: var(--msec-safe-bottom); }
+.safe-x      { padding-left: var(--msec-safe-left); padding-right: var(--msec-safe-right); }
+.safe-all {
+  padding-top: var(--msec-safe-top);
+  padding-bottom: var(--msec-safe-bottom);
+  padding-left: var(--msec-safe-left);
+  padding-right: var(--msec-safe-right);
+}
+/* Clears the fixed bottom navigation *and* the gesture bar beneath it. */
+.pb-safe-nav { padding-bottom: calc(var(--msec-navbar-height) + var(--msec-safe-bottom) + 0.5rem); }
 
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;

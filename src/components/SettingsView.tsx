@@ -79,7 +79,7 @@ export function SettingsView() {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-[#0F1115] p-8 custom-scrollbar">
+    <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-[#0F1115] p-8 pb-safe-nav md:pb-8 custom-scrollbar">
       <div className="max-w-2xl mx-auto space-y-8">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Settings</h2>

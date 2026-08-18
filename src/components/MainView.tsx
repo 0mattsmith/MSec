@@ -64,17 +64,17 @@ export function MainView() {
 
   const { showMenu } = useContextMenu();
 
-  if (activeCategory === 'generator') return <div className="flex-1 overflow-y-auto custom-scrollbar w-full bg-white dark:bg-[#0F1115] pb-24 md:pb-0"><PasswordGeneratorTool /></div>;
-  if (activeCategory === 'emails') return <div className="flex-1 overflow-y-auto custom-scrollbar w-full bg-white dark:bg-[#0F1115] pb-24 md:pb-0"><EmailMaskingTool /></div>;
-  if (activeCategory === 'scanner') return <div className="flex-1 overflow-y-auto custom-scrollbar w-full bg-white dark:bg-[#0F1115] pb-24 md:pb-0"><BreachScannerTool /></div>;
-  if (activeCategory === 'dashboard') return <div className="flex-1 overflow-y-auto custom-scrollbar w-full pb-24 md:pb-0"><DashboardView /></div>;
-  if (activeCategory === 'settings') return <div className="flex-1 overflow-y-auto custom-scrollbar w-full bg-white dark:bg-[#0F1115] pb-24 md:pb-0"><SettingsView /></div>;
-  if (activeCategory === 'authenticator') return <div className="flex-1 overflow-y-auto custom-scrollbar w-full bg-white dark:bg-[#0F1115] pb-24 md:pb-0"><AuthenticatorView /></div>;
-  if (activeCategory === 'health') return <div className="flex-1 overflow-y-auto custom-scrollbar w-full bg-white dark:bg-[#0F1115] pb-24 md:pb-0"><PasswordHealthTool /></div>;
+  if (activeCategory === 'generator') return <div className="flex-1 overflow-y-auto custom-scrollbar w-full bg-white dark:bg-[#0F1115] pb-safe-nav md:pb-0"><PasswordGeneratorTool /></div>;
+  if (activeCategory === 'emails') return <div className="flex-1 overflow-y-auto custom-scrollbar w-full bg-white dark:bg-[#0F1115] pb-safe-nav md:pb-0"><EmailMaskingTool /></div>;
+  if (activeCategory === 'scanner') return <div className="flex-1 overflow-y-auto custom-scrollbar w-full bg-white dark:bg-[#0F1115] pb-safe-nav md:pb-0"><BreachScannerTool /></div>;
+  if (activeCategory === 'dashboard') return <div className="flex-1 overflow-y-auto custom-scrollbar w-full pb-safe-nav md:pb-0"><DashboardView /></div>;
+  if (activeCategory === 'settings') return <div className="flex-1 overflow-y-auto custom-scrollbar w-full bg-white dark:bg-[#0F1115] pb-safe-nav md:pb-0"><SettingsView /></div>;
+  if (activeCategory === 'authenticator') return <div className="flex-1 overflow-y-auto custom-scrollbar w-full bg-white dark:bg-[#0F1115] pb-safe-nav md:pb-0"><AuthenticatorView /></div>;
+  if (activeCategory === 'health') return <div className="flex-1 overflow-y-auto custom-scrollbar w-full bg-white dark:bg-[#0F1115] pb-safe-nav md:pb-0"><PasswordHealthTool /></div>;
 
   if (activeCategory === 'tools') {
     return (
-      <div className="flex-1 overflow-y-auto custom-scrollbar w-full bg-gray-50 dark:bg-[#0F1115] p-6 pb-32">
+      <div className="flex-1 overflow-y-auto custom-scrollbar w-full bg-gray-50 dark:bg-[#0F1115] p-6 pb-safe-nav">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Security Tools</h1>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
            {/* Generator */}
@@ -478,7 +478,7 @@ function ItemDetail({ item, isEditing, setIsEditing, updateItem, moveToTrash, re
   };
 
   return (
-    <div className="p-8 pb-32 md:pb-8 max-w-2xl mx-auto flex flex-col h-full w-full">
+    <div className="p-8 pb-safe-nav md:pb-8 max-w-2xl mx-auto flex flex-col h-full w-full">
       <div className="flex-1">
         <div className="mb-4 md:hidden">
           <button onClick={() => { setIsEditing(false); setSelectedItemId(null); }} className="flex items-center text-sm font-bold text-gray-500 hover:text-indigo-600">
