@@ -1,7 +1,7 @@
 {
   "name": "msec",
   "private": true,
-  "version": "0.1.3",
+  "version": "0.1.4",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
@@ -12,7 +12,10 @@
     "test:crypto": "tsx test-crypto.ts",
     "tauri": "tauri",
     "test:restore": "tsx test-restore.ts",
-    "test:detect": "node extension/detect-test.cjs"
+    "test:detect": "node extension/detect-test.cjs",
+    "test:biometric": "tsx test-biometric.ts",
+    "test:updater": "tsx test-updater.ts",
+    "test": "npm run lint && npm run test:crypto && npm run test:restore && npm run test:biometric && npm run test:updater && npm run test:detect"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

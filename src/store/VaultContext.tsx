@@ -6,10 +6,18 @@ import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from
 import {
   createKdfConfig,
   unlockVaultKey,
+  deriveRawVaultKey,
   encryptJson,
   decryptJson,
   type KdfConfig,
 } from '../lib/crypto';
+import {
+  biometricAvailable,
+  biometricEnrolled,
+  disableBiometric,
+  enrolBiometric,
+  unlockWithBiometric as biometricUnlock,
+} from '../lib/biometric';
 
 // localStorage keys
 const LS_KDF = 'msec_kdf'; // KDF config + verifier (no secrets)
@@ -105,7 +113,12 @@ function readLegacyPayload(): VaultPayload {
 
 interface VaultContextType extends AppState {
   unlock: (password: string) => Promise<boolean>;
-  unlockWithBiometric: () => Promise<boolean>;
+  unlockWithBiometric: () => Promise<{ ok: boolean; error?: string }>;
+  /** Enrol this device's fingerprint / face / Windows Hello. Needs the master password again. */
+  enableBiometric: (masterPassword: string) => Promise<{ ok: boolean; error?: string }>;
+  turnOffBiometric: () => void;
+  biometricReady: boolean;
+  biometricSupported: boolean;
   lock: () => void;
   setMasterPassword: (password: string) => Promise<void>;
   setTheme: (theme: 'dark' | 'light') => void;
@@ -149,6 +162,12 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
   // same master password derives the same key. Without this the device would
   // generate a fresh salt and be unable to decrypt synced data.
   const [remoteKdf, setRemoteKdf] = useState<KdfConfig | null>(null);
+  const [biometricReady, setBiometricReady] = useState(biometricEnrolled());
+  const [biometricSupported, setBiometricSupported] = useState(false);
+
+  useEffect(() => {
+    biometricAvailable().then(setBiometricSupported);
+  }, []);
 
   const updateState = (updates: Partial<AppState>) => {
     setState((prev) => ({ ...prev, ...updates }));
@@ -392,32 +411,43 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
   };
 
   /**
-   * Biometric quick-unlock. Only possible while the vault key is still in
-   * memory (i.e. after a soft lock in this session). After a reload or
-   * sign-out the master password is required — we cannot decrypt without it.
+   * Biometric unlock. The vault key is unwrapped by a secret only this
+   * device's authenticator can produce, after a successful biometric check —
+   * so this works from a cold start, not just after a soft lock.
    */
-  const unlockWithBiometric = async (): Promise<boolean> => {
-    if (!keyRef.current) {
-      alert('Biometric unlock is only available after unlocking with your master password this session.');
-      return false;
-    }
-    try {
-      const challenge = new Uint8Array(32);
-      window.crypto.getRandomValues(challenge);
-      await navigator.credentials.get({
-        publicKey: {
-          challenge,
-          timeout: 60000,
-          userVerification: 'required',
-        },
-      });
-      updateState({ isUnlocked: true });
-      return true;
-    } catch (error: any) {
-      console.warn('Biometric failed or rejected:', error);
-      alert('Biometric authentication failed. Please use your master password.');
-      return false;
-    }
+  const unlockWithBiometric = async (): Promise<{ ok: boolean; error?: string }> => {
+    const kdf = readKdfConfig() ?? remoteKdf;
+    if (!kdf) return { ok: false, error: 'No vault on this device yet.' };
+
+    const result = await biometricUnlock(kdf);
+    if (!result.ok || !result.key) return { ok: false, error: result.error };
+
+    keyRef.current = result.key;
+    if (!readKdfConfig()) localStorage.setItem(LS_KDF, JSON.stringify(kdf));
+    await loadVaultIntoState(result.key);
+    updateState({ isUnlocked: true, masterPasswordSet: true });
+    return { ok: true };
+  };
+
+  /** Enrol biometrics. Re-asks for the master password on purpose. */
+  const enableBiometric = async (masterPassword: string): Promise<{ ok: boolean; error?: string }> => {
+    const kdf = readKdfConfig() ?? remoteKdf;
+    if (!kdf) return { ok: false, error: 'No vault key configuration found.' };
+
+    const raw = await deriveRawVaultKey(masterPassword, kdf);
+    if (!raw) return { ok: false, error: 'Incorrect master password.' };
+
+    const result = await enrolBiometric(raw, currentUser?.email || 'MSec vault');
+    raw.fill(0); // scrub the copy we made
+    if (!result.ok) return { ok: false, error: result.error };
+
+    setBiometricReady(true);
+    return { ok: true };
+  };
+
+  const turnOffBiometric = () => {
+    disableBiometric();
+    setBiometricReady(false);
   };
 
   const lock = () => updateState({ isUnlocked: false, selectedItemId: null });
@@ -544,6 +574,7 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
           localStorage.removeItem(LS_LEGACY_STATE);
           localStorage.removeItem(LS_LEGACY_MP);
           localStorage.removeItem(LS_LEGACY_WORKSPACES);
+          disableBiometric();
           keyRef.current = null;
           if (currentUser) signOut(auth);
           window.location.reload();
@@ -564,6 +595,10 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
         updateWorkspaces: (workspaces) => updateState({ workspaces }),
 
         remoteVaultAvailable: !!remoteKdf && !readKdfConfig(),
+        enableBiometric,
+        turnOffBiometric,
+        biometricReady,
+        biometricSupported,
       }}
     >
       {children}

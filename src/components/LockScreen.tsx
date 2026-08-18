@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useVault } from '../store/VaultContext';
 import { Lock, Fingerprint, Key, Eye, EyeOff, Cloud, ShieldAlert, Check } from 'lucide-react';
 import { checkPasswordStrength } from '../lib/utils';
+import { UpdateBanner } from './UpdateBanner';
 
 const INPUT_CLASS =
   'w-full rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-gray-900 placeholder-gray-400 ' +
@@ -12,7 +13,7 @@ const INPUT_CLASS =
 export function LockScreen() {
   const {
     unlock, unlockWithBiometric, masterPasswordSet, setMasterPassword,
-    signInWithGoogle, currentUser, remoteVaultAvailable,
+    signInWithGoogle, currentUser, remoteVaultAvailable, biometricReady,
   } = useVault();
 
   const [password, setPassword] = useState('');
@@ -178,19 +179,24 @@ export function LockScreen() {
           </div>
         )}
 
-        {!isCreating && (
+        {!isCreating && biometricReady && (
           <div className="mt-8 flex flex-col items-center space-y-4 border-t border-gray-100 pt-6 dark:border-slate-800">
             <button
               type="button"
-              onClick={() => unlockWithBiometric()}
-              className="flex items-center space-x-2 rounded-md px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800/50"
+              onClick={async () => {
+                setError('');
+                const res = await unlockWithBiometric();
+                if (!res.ok && res.error) setError(res.error);
+              }}
+              className="flex items-center space-x-2 rounded-md px-4 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-500/10"
             >
-              <Fingerprint className="h-5 w-5 opacity-50" />
-              <span>Use biometric</span>
+              <Fingerprint className="h-5 w-5" />
+              <span>Unlock with biometrics</span>
             </button>
           </div>
         )}
       </div>
+      <UpdateBanner />
     </div>
   );
 }

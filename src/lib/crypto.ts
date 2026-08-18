@@ -100,6 +100,38 @@ export async function createKdfConfig(password: string): Promise<{ config: KdfCo
 }
 
 /**
+ * Derive the raw vault key bytes from a password + config.
+ *
+ * Used only when enrolling biometric unlock, where the key material has to be
+ * wrapped and stored. The everyday vault key stays non-extractable.
+ * Returns null if the password is wrong.
+ */
+export async function deriveRawVaultKey(password: string, config: KdfConfig): Promise<Uint8Array | null> {
+  const check = await unlockVaultKey(password, config);
+  if (!check) return null;
+  const baseKey = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: fromB64(config.salt) as BufferSource, iterations: config.iterations },
+    baseKey, 256);
+  return new Uint8Array(bits);
+}
+
+/** Import raw key bytes back into a non-extractable AES-GCM key. */
+export async function importVaultKey(raw: Uint8Array): Promise<CryptoKey> {
+  return crypto.subtle.importKey('raw', raw as BufferSource, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+}
+
+/** Confirm a key really is this vault's key (decrypts the stored verifier). */
+export async function verifyVaultKey(key: CryptoKey, config: KdfConfig): Promise<boolean> {
+  try {
+    return (await decryptString(key, config.verifier)) === VERIFIER_PLAINTEXT;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Derive the vault key from a password + stored config.
  * Returns null if the password is wrong (verifier fails to decrypt).
  */
