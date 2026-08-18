@@ -120,7 +120,7 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: "MSec ${{ github.ref_name }}"
-          draft: true
+          draft: false  # published so the in-app updater can see it
           files: release/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

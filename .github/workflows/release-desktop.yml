@@ -55,6 +55,7 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "MSec ${{ github.ref_name }}"
           releaseBody: "See the attached installers for Windows, macOS (Universal), and Linux."
-          releaseDraft: true
+          # Published immediately so the in-app updater can see it.
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

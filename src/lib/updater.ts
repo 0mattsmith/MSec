@@ -11,7 +11,9 @@
  *   - Web/PWA : the service worker already fetched it; reload applies it
  */
 
-const RELEASES_API = 'https://api.github.com/repos/0mattsmith/MSec/releases/latest';
+// The /latest endpoint only returns *published* releases and 404s when there
+// are none, so query the list and pick the newest usable one ourselves.
+const RELEASES_API = 'https://api.github.com/repos/0mattsmith/MSec/releases?per_page=10';
 const RELEASES_PAGE = 'https://github.com/0mattsmith/MSec/releases/latest';
 const LS_LAST_CHECK = 'msec_update_check';
 const LS_SKIPPED = 'msec_update_skipped';
@@ -61,7 +63,15 @@ export async function checkForUpdate(options: { force?: boolean } = {}): Promise
 
     const res = await fetch(RELEASES_API, { headers: { Accept: 'application/vnd.github+json' } });
     if (!res.ok) return null;
-    const data = await res.json();
+    const list = await res.json();
+    if (!Array.isArray(list) || list.length === 0) return null;
+
+    // Skip drafts (invisible to everyone but the repo owner) and pick the
+    // highest version rather than trusting list order.
+    const published = list.filter((r: any) => !r.draft && r.tag_name);
+    if (published.length === 0) return null;
+    const data = published.reduce((best: any, r: any) =>
+      compareVersions(r.tag_name, best.tag_name) > 0 ? r : best, published[0]);
 
     const latest: string = (data.tag_name || '').replace(/^v/, '');
     if (!latest || compareVersions(latest, APP_VERSION) <= 0) return null;
