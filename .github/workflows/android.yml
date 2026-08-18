@@ -47,7 +47,7 @@ jobs:
       - run: npm ci
 
       - name: Generate Tauri icons
-        run: npx tauri icon public/icons/icon-1024.png
+        run: npx tauri icon public/icons/icon-1024-adaptive.png
 
       - name: Initialize Android project
         run: npx tauri android init
