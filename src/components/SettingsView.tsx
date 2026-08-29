@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useVault } from '../store/VaultContext';
-import { Download, Upload, Trash2, ShieldCheck, Check, Cloud, Fingerprint, ArrowUpCircle, RefreshCw, Lock } from 'lucide-react';
+import { Download, Upload, Trash2, ShieldCheck, Check, Cloud, Fingerprint, ArrowUpCircle, RefreshCw, Lock, FileUp, ScanLine } from 'lucide-react';
 import {
   APP_VERSION, checkForUpdate, applyUpdate, detectPlatform,
   updateActionLabel, type UpdateInfo,
 } from '../lib/updater';
 import { downloadFile, backupFilename, inspectBackup } from '../lib/backup';
+import { parseImport, type ParsedImport } from '../lib/importers';
+import { QrImport } from './QrImport';
+import type { ImportedTotp } from '../lib/otpimport';
 
 export function SettingsView() {
   const { items, folders, updateItem, deleteItemPermanently, clearStorage, addFolder, addItem, settings, updateSettings, currentUser, signInWithGoogle, signOutUser,
@@ -90,21 +93,57 @@ export function SettingsView() {
     if (!res) setCheckedMsg(`You're on the latest version (${APP_VERSION}).`);
   };
 
-  const handleImport = () => {
-    try {
-      const data = JSON.parse(importJson);
-      if (data.folders) {
-        data.folders.forEach((f: any) => addFolder(f.name));
-      }
-      if (data.items) {
-        data.items.forEach((i: any) => addItem(i));
-      }
-      setSuccessMsg('Import successful!');
-      setImportJson('');
-      setTimeout(() => setSuccessMsg(''), 3000);
-    } catch (e) {
-      alert('Invalid JSON format.');
+  // --- Importing from other password managers ---
+  const [preview, setPreview] = useState<ParsedImport | null>(null);
+  const [importError, setImportError] = useState('');
+  const [showQr, setShowQr] = useState(false);
+
+  const handleImportFile = async (file: File | undefined) => {
+    setImportError('');
+    setPreview(null);
+    if (!file) return;
+    const text = await file.text();
+    const result = parseImport(text, file.name);
+    if (!result.ok) { setImportError(result.error || 'Could not read that file.'); return; }
+    setPreview(result);
+  };
+
+  const confirmImport = () => {
+    if (!preview?.items) return;
+    (preview.folders || []).forEach((name) => addFolder(name));
+    preview.items.forEach((item) => {
+      const { folderName, ...rest } = item as any;
+      addItem(rest);
+    });
+    setSuccessMsg(`Imported ${preview.items.length} items from ${preview.formatLabel}.`);
+    setPreview(null);
+    setTimeout(() => setSuccessMsg(''), 6000);
+  };
+
+  const handleQrImport = (codes: ImportedTotp[]) => {
+    codes.forEach((c) => addItem({
+      type: 'login',
+      title: c.title,
+      username: c.username,
+      totpSecret: c.secret,
+      isFavorite: false,
+    } as any));
+    setShowQr(false);
+    if (codes.length) {
+      setSuccessMsg(`Added ${codes.length} authenticator code${codes.length === 1 ? '' : 's'}.`);
+      setTimeout(() => setSuccessMsg(''), 6000);
     }
+  };
+
+  // Kept for the legacy paste box (still handy for hand-edited JSON).
+  const handleImport = () => {
+    const result = parseImport(importJson, 'pasted.json');
+    if (!result.ok) { setImportError(result.error || 'Invalid data.'); return; }
+    (result.folders || []).forEach((name) => addFolder(name));
+    result.items?.forEach((item) => { const { folderName, ...rest } = item as any; addItem(rest); });
+    setSuccessMsg(`Imported ${result.items?.length} items.`);
+    setImportJson('');
+    setTimeout(() => setSuccessMsg(''), 4000);
   };
 
   const handleExport = () => {
@@ -294,27 +333,80 @@ export function SettingsView() {
         <div className="bg-white dark:bg-[#1A1F26] rounded-xl border border-gray-200 dark:border-slate-800 p-6">
           <div className="flex flex-col space-y-4">
             <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center">
-              <Upload className="h-5 w-5 mr-2 text-indigo-500" /> Import Data
+              <Upload className="h-5 w-5 mr-2 text-indigo-500" /> Import from another app
             </h3>
             <p className="text-sm text-gray-500 dark:text-slate-400">
-              Paste your exported JSON from ProtonPass, NordPass, or MSec here. This will import items and preserve your folder structure.
+              Import an export file from Bitwarden, LastPass, 1Password, KeePass, Chrome/Edge,
+              or MSec. JSON and CSV are both understood, and the format is detected for you.
+              Everything is read on this device.
             </p>
-            <textarea
-              className="w-full h-32 bg-gray-50 dark:bg-[#121418] text-sm py-2 px-3 rounded-md border border-gray-200 dark:border-slate-700 focus:outline-none focus:border-indigo-500 dark:text-white text-gray-900 font-mono"
-              placeholder='{ "folders": [...], "items": [...] }'
-              value={importJson}
-              onChange={(e) => setImportJson(e.target.value)}
-            />
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-green-500 font-bold">{successMsg}</span>
-              <button 
-                onClick={handleImport}
-                disabled={!importJson.trim()}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-md text-xs font-bold uppercase transition-colors"
+
+            <div className="flex flex-wrap gap-3">
+              <label className="flex cursor-pointer items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-500">
+                <FileUp className="mr-2 h-4 w-4" /> Choose file
+                <input
+                  type="file"
+                  accept=".json,.csv,.txt,application/json,text/csv"
+                  className="hidden"
+                  onChange={(e) => handleImportFile(e.target.files?.[0])}
+                />
+              </label>
+
+              <button
+                onClick={() => setShowQr(true)}
+                className="flex items-center rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
               >
-                Import Data
+                <ScanLine className="mr-2 h-4 w-4" /> Scan 2FA QR code
               </button>
             </div>
+
+            {importError && <p className="text-sm font-medium text-red-500">{importError}</p>}
+
+            {preview?.ok && (
+              <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-500/30 dark:bg-indigo-500/10">
+                <p className="text-sm font-bold text-indigo-900 dark:text-indigo-200">
+                  {preview.formatLabel} file — {preview.items?.length} items ready to import
+                </p>
+                <p className="mt-1 text-xs text-indigo-800/80 dark:text-indigo-300/80">
+                  {preview.folders?.length ? `${preview.folders.length} folders. ` : ''}
+                  {preview.skipped ? `${preview.skipped} entries skipped (unsupported types). ` : ''}
+                  Items are added to your vault; nothing is replaced.
+                </p>
+                <ul className="mt-2 max-h-32 space-y-1 overflow-y-auto text-xs text-indigo-900/80 dark:text-indigo-200/80">
+                  {preview.items?.slice(0, 5).map((i, n) => (
+                    <li key={n} className="truncate">• {i.title}{i.username ? ` — ${i.username}` : ''}</li>
+                  ))}
+                  {(preview.items?.length || 0) > 5 && <li>…and {(preview.items?.length || 0) - 5} more</li>}
+                </ul>
+                <div className="mt-3 flex gap-2">
+                  <button onClick={confirmImport} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-500">
+                    Import {preview.items?.length} items
+                  </button>
+                  <button onClick={() => setPreview(null)} className="rounded-lg border border-indigo-300 px-4 py-2 text-sm font-medium text-indigo-900 dark:border-indigo-500/30 dark:text-indigo-200">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {successMsg && <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{successMsg}</p>}
+
+            <details className="text-xs text-gray-500 dark:text-slate-500">
+              <summary className="cursor-pointer">Or paste JSON directly</summary>
+              <textarea
+                className="mt-2 h-24 w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-900 focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-[#121418] dark:text-white"
+                placeholder='{ "folders": [...], "items": [...] }'
+                value={importJson}
+                onChange={(e) => setImportJson(e.target.value)}
+              />
+              <button
+                onClick={handleImport}
+                disabled={!importJson.trim()}
+                className="mt-2 rounded-md bg-slate-700 px-3 py-1.5 font-bold text-white disabled:opacity-50"
+              >
+                Import pasted JSON
+              </button>
+            </details>
           </div>
         </div>
 
@@ -471,6 +563,7 @@ export function SettingsView() {
           </div>
         </div>
       </div>
+      {showQr && <QrImport onImport={handleQrImport} onClose={() => setShowQr(false)} />}
     </div>
   );
 }

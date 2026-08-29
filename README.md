@@ -44,6 +44,8 @@ The master password is run through PBKDF2-SHA256 (600,000 iterations, random 16-
 
 **Auto-lock** clears the key from memory after a configurable idle period (default 5 minutes), and repeated failed unlock attempts trigger a growing cooldown (5s, 15s, 45s… capped at 30 minutes) that survives restarting the app.
 
+**Importing.** Settings → Import from another app reads export files from Bitwarden (JSON), LastPass, 1Password, KeePass, Chrome/Edge/Brave (CSV) and MSec itself — the format is detected automatically and you see a preview before anything is added. Authenticator codes can be imported by scanning a 2FA QR code with the camera or uploading a screenshot of one; Google Authenticator's "Export accounts" QR is decoded too, bringing every account across in one scan. All parsing happens on-device.
+
 **Backups.** Settings → Encrypted backup downloads a `.msecvault` file: your whole vault encrypted with your master password, safe to keep in cloud storage. Restoring needs the password that was in force when the backup was made. A plaintext export exists for migrating to another manager, but it's deliberately buried behind a warning — it contains every password in readable form.
 
 Consequences worth knowing: there is no password recovery (losing the master password means losing the vault, which is why backups matter), and restoring a backup replaces the vault on that device and clears biometric enrolment.
