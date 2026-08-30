@@ -1,7 +1,7 @@
 {
   "name": "msec",
   "private": true,
-  "version": "0.1.10",
+  "version": "0.1.11",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
@@ -15,11 +15,12 @@
     "test:detect": "node extension/detect-test.cjs",
     "test:biometric": "tsx test-biometric.ts",
     "test:updater": "tsx test-updater.ts",
-    "test": "npm run lint && npm run test:crypto && npm run test:restore && npm run test:biometric && npm run test:backup && npm run test:lockout && npm run test:updater && npm run test:import && npm run test:otp && npm run test:detect",
+    "test": "npm run lint && npm run test:crypto && npm run test:restore && npm run test:biometric && npm run test:backup && npm run test:lockout && npm run test:updater && npm run test:import && npm run test:otp && npm run test:qr && npm run test:detect",
     "test:backup": "tsx test-backup.ts",
     "test:lockout": "tsx test-lockout.ts",
     "test:import": "tsx import-test.ts",
-    "test:otp": "tsx otp-test.ts"
+    "test:otp": "tsx otp-test.ts",
+    "test:qr": "tsx qr-accum-test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
