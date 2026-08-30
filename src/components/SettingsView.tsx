@@ -280,7 +280,10 @@ export function SettingsView() {
                   <p className="mt-1 line-clamp-3 text-xs text-indigo-800/80 dark:text-indigo-300/80">{update.notes}</p>
                 )}
                 <button
-                  onClick={() => applyUpdate(update, platform)}
+                  onClick={async () => {
+                    const problem = await applyUpdate(update, platform);
+                    if (problem) setCheckedMsg(problem);
+                  }}
                   className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-500"
                 >
                   {updateActionLabel(platform)}

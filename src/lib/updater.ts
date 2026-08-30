@@ -105,8 +105,12 @@ export function updateActionLabel(platform: Platform): string {
   }
 }
 
-/** Apply or start the update, however that works on this platform. */
-export async function applyUpdate(info: UpdateInfo, platform: Platform): Promise<void> {
+/**
+ * Apply or start the update, however that works on this platform.
+ * Returns an error message rather than throwing, so the UI can show what
+ * went wrong instead of appearing to do nothing.
+ */
+export async function applyUpdate(info: UpdateInfo, platform: Platform): Promise<string | null> {
   if (platform === 'web') {
     // The service worker caches a new build as soon as it sees one; asking it
     // to activate immediately and reloading is all that's needed.
@@ -118,22 +122,44 @@ export async function applyUpdate(info: UpdateInfo, platform: Platform): Promise
       /* ignore — plain reload still picks up a new build */
     }
     window.location.reload();
-    return;
+    return null;
   }
 
   const target = platform === 'android' && info.apkUrl ? info.apkUrl : info.url;
+  const isTauri = '__TAURI__' in window || '__TAURI_INTERNALS__' in window;
+  const problems: string[] = [];
 
   // Inside the Tauri webview, window.open is intercepted and the link can
   // silently do nothing — the opener plugin hands the URL to the OS browser,
   // which then downloads the APK / installer as normal.
-  try {
-    const { openUrl } = await import('@tauri-apps/plugin-opener');
-    await openUrl(target);
-    return;
-  } catch {
-    /* not a Tauri build, or the plugin is unavailable — fall through */
+  if (isTauri) {
+    try {
+      const { openUrl } = await import('@tauri-apps/plugin-opener');
+      await openUrl(target);
+      return null;
+    } catch (e: any) {
+      problems.push(`opener: ${e?.message || e}`);
+    }
   }
-  window.open(target, '_blank', 'noopener,noreferrer');
+
+  try {
+    const opened = window.open(target, '_blank', 'noopener,noreferrer');
+    if (opened) return null;
+    problems.push('window.open was blocked');
+  } catch (e: any) {
+    problems.push(`window.open: ${e?.message || e}`);
+  }
+
+  // Last resort: navigate this window at the download. On Android the browser
+  // takes over the download and the app stays running behind it.
+  try {
+    window.location.href = target;
+    return null;
+  } catch (e: any) {
+    problems.push(`navigation: ${e?.message || e}`);
+  }
+
+  return `Could not open the download. ${problems.join('; ')}. You can get it manually from ${info.url}`;
 }
 
 declare global {
