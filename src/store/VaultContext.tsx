@@ -124,7 +124,9 @@ interface VaultContextType extends AppState {
   /** Serialise the unlocked vault into an encrypted backup file. */
   exportBackup: () => Promise<{ ok: boolean; text?: string; error?: string }>;
   /** Replace this device's vault with the contents of a backup file. */
-  importBackup: (fileText: string, masterPassword: string) => Promise<{ ok: boolean; error?: string; itemCount?: number }>;
+  importBackup: (fileText: string, masterPassword: string, mode?: 'replace' | 'merge') => Promise<{ ok: boolean; error?: string; itemCount?: number; added?: number; updated?: number }>;
+  /** Plain JSON of the vault with ids intact, for MSec-to-MSec transfer. */
+  exportTransfer: () => string;
   biometricReady: boolean;
   biometricSupported: boolean;
   lock: () => void;
@@ -504,7 +506,17 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const importBackup = async (fileText: string, masterPassword: string) => {
+  const exportTransfer = (): string => JSON.stringify({
+    format: 'msec-vault-transfer',
+    v: 1,
+    exportedAt: new Date().toISOString(),
+    items: state.items,
+    folders: state.folders,
+    maskedEmails: state.maskedEmails,
+    workspaces: state.workspaces,
+  }, null, 2);
+
+  const importBackup = async (fileText: string, masterPassword: string, mode: 'replace' | 'merge' = 'replace') => {
     const result = await restoreBackup(fileText, masterPassword);
     if (!result.ok || !result.payload || !result.kdf) {
       return { ok: false, error: result.error };
@@ -521,15 +533,46 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     disableBiometric();
     setBiometricReady(false);
 
+    const incomingItems = ((result.payload.items as any) ?? []) as VaultItem[];
+    const incomingFolders = ((result.payload.folders as any) ?? []) as VaultFolder[];
+
+    if (mode === 'merge') {
+      // Ids are stable across MSec instances, so merging by id updates the
+      // entries you already have and adds the ones you don't — no duplicates.
+      const byId = new Map(state.items.map((i) => [i.id, i]));
+      let added = 0;
+      let updated = 0;
+      for (const item of incomingItems) {
+        if (byId.has(item.id)) {
+          const mine = byId.get(item.id)!;
+          // Last edit wins, so the newer copy of an entry survives.
+          if ((item.updatedAt || 0) > (mine.updatedAt || 0)) { byId.set(item.id, item); updated++; }
+        } else {
+          byId.set(item.id, item);
+          added++;
+        }
+      }
+      const folderById = new Map(state.folders.map((f) => [f.id, f]));
+      for (const f of incomingFolders) if (!folderById.has(f.id)) folderById.set(f.id, f);
+
+      updateState({
+        items: [...byId.values()],
+        folders: [...folderById.values()],
+        isUnlocked: true,
+        masterPasswordSet: true,
+      });
+      return { ok: true, itemCount: incomingItems.length, added, updated };
+    }
+
     updateState({
-      items: (result.payload.items as any) ?? [],
-      folders: (result.payload.folders as any) ?? [],
+      items: incomingItems,
+      folders: incomingFolders,
       maskedEmails: (result.payload.maskedEmails as any) ?? [],
       workspaces: (result.payload.workspaces as any) ?? [],
       isUnlocked: true,
       masterPasswordSet: true,
     });
-    return { ok: true, itemCount: (result.payload.items as any)?.length ?? 0 };
+    return { ok: true, itemCount: incomingItems.length, added: incomingItems.length, updated: 0 };
   };
 
   const lock = () => updateState({ isUnlocked: false, selectedItemId: null });
@@ -552,11 +595,14 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
         updateGeneratorOptions: (opts) => updateState({ generatorOptions: { ...state.generatorOptions, ...opts } }),
 
         addItem: async (item) => {
-          const id = crypto.randomUUID();
+          // A transferred item brings its own id so the same entry stays the
+          // same entry across MSec instances; anything else gets a fresh one.
+          const incoming = item as Partial<VaultItem>;
+          const id = incoming.id || crypto.randomUUID();
           const newItem: VaultItem = {
             ...item,
             id,
-            createdAt: Date.now(),
+            createdAt: incoming.createdAt || Date.now(),
             updatedAt: Date.now(),
           };
           if (currentUser) {
@@ -681,6 +727,7 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
         turnOffBiometric,
         exportBackup,
         importBackup,
+        exportTransfer,
         biometricReady,
         biometricSupported,
       }}

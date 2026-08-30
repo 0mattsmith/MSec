@@ -4,14 +4,17 @@
  * There is no universal ID for a credential, so identity is worked out per
  * type, strongest signal first:
  *
- *   1. externalId  — the ID the exporting app used. If we've seen it before,
+ *   1. MSec UUID   — for vaults transferred between MSec instances the item
+ *                    keeps its own id, so a re-import is recognised exactly,
+ *                    however the entry has since been renamed or edited.
+ *   2. externalId  — the ID the exporting app used. If we've seen it before,
  *                    this is definitively the same record.
- *   2. TOTP secret — the shared secret *is* the account. Two entries with the
+ *   3. TOTP secret — the shared secret *is* the account. Two entries with the
  *                    same secret generate identical codes, so they are the
  *                    same second factor whatever they're called.
- *   3. domain + username — the practical identity of a login. Subdomains and
+ *   4. domain + username — the practical identity of a login. Subdomains and
  *                    "www." are ignored so github.com and www.github.com match.
- *   4. card number, or note title — for non-login types.
+ *   5. card number, or note title — for non-login types.
  *
  * "Duplicate" is deliberately strict: every meaningful field must match. Near
  * misses are reported as "similar" and stay ticked, because two entries for the
@@ -66,6 +69,9 @@ export function normaliseSecret(secret?: string): string {
 export function fingerprints(item: Partial<VaultItem> & { externalId?: string }): string[] {
   const keys: string[] = [];
 
+  // An MSec id travels with the item between instances, so it is the most
+  // reliable signal we have — better than any heuristic.
+  if (item.id) keys.push(`uuid:${item.id}`);
   if (item.externalId) keys.push(`ext:${item.externalId}`);
 
   const secret = normaliseSecret(item.totpSecret);

@@ -18,7 +18,7 @@
 import type { VaultItem, ItemCategory } from '../types';
 
 export type ImportFormat =
-  | 'msec-json' | 'bitwarden-json' | 'lastpass-csv' | 'chrome-csv'
+  | 'msec-transfer' | 'msec-json' | 'bitwarden-json' | 'lastpass-csv' | 'chrome-csv'
   | 'keepass-csv' | 'onepassword-csv' | 'generic-csv' | 'unknown';
 
 export interface ParsedImport {
@@ -31,7 +31,10 @@ export interface ParsedImport {
   skipped?: number;
 }
 
+export const TRANSFER_FORMAT = 'msec-vault-transfer';
+
 const FORMAT_LABELS: Record<ImportFormat, string> = {
+  'msec-transfer': 'MSec transfer file',
   'msec-json': 'MSec export',
   'bitwarden-json': 'Bitwarden',
   'lastpass-csv': 'LastPass',
@@ -121,6 +124,8 @@ export function detectFormat(text: string, filename = ''): ImportFormat {
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
     try {
       const data = JSON.parse(trimmed);
+      // Our own transfer file announces itself, so ids can be trusted.
+      if (data?.format === TRANSFER_FORMAT) return 'msec-transfer';
       if (Array.isArray(data?.items) && data.items.some((i: any) => i?.login || i?.type === 1)) {
         return 'bitwarden-json';
       }
@@ -170,7 +175,7 @@ export function parseImport(text: string, filename = ''): ParsedImport {
     const folders = new Set<string>();
     let skipped = 0;
 
-    if (format === 'msec-json' || format === 'bitwarden-json') {
+    if (format === 'msec-transfer' || format === 'msec-json' || format === 'bitwarden-json') {
       const data = JSON.parse(text);
       const list = Array.isArray(data) ? data : data.items || [];
 
@@ -215,6 +220,11 @@ export function parseImport(text: string, filename = ''): ParsedImport {
           } else {
             skipped++;
           }
+        } else if (format === 'msec-transfer') {
+          // A vault transferred from another MSec instance: keep everything,
+          // including the item's own id, so repeated transfers stay idempotent.
+          const { folderId, ...rest } = raw;
+          items.push({ ...rest, folderName: folderId ? folderNames.get(folderId) : undefined });
         } else {
           // Our own export shape
           items.push(toItem({

@@ -15,7 +15,7 @@ import type { ImportedTotp } from '../lib/otpimport';
 export function SettingsView() {
   const { items, folders, updateItem, deleteItemPermanently, clearStorage, addFolder, addItem, settings, updateSettings, currentUser, signInWithGoogle, signOutUser,
     biometricReady, biometricSupported, enableBiometric, turnOffBiometric,
-    exportBackup, importBackup } = useVault();
+    exportBackup, importBackup, exportTransfer } = useVault();
 
   // --- Encrypted backup ---
   const [backupBusy, setBackupBusy] = useState(false);
@@ -24,6 +24,7 @@ export function SettingsView() {
   const [restoreText, setRestoreText] = useState('');
   const [restoreInfo, setRestoreInfo] = useState<{ createdAt: string; itemCount: number } | null>(null);
   const [restorePassword, setRestorePassword] = useState('');
+  const [restoreMode, setRestoreMode] = useState<'merge' | 'replace'>('merge');
 
   const handleBackup = async () => {
     setBackupBusy(true); setBackupErr(''); setBackupMsg('');
@@ -47,12 +48,14 @@ export function SettingsView() {
 
   const handleRestore = async () => {
     setBackupBusy(true); setBackupErr('');
-    const res = await importBackup(restoreText, restorePassword);
+    const res = await importBackup(restoreText, restorePassword, restoreMode);
     setBackupBusy(false);
     setRestorePassword('');
     if (!res.ok) { setBackupErr(res.error || 'Restore failed.'); return; }
     setRestoreInfo(null); setRestoreText('');
-    setBackupMsg(`Restored ${res.itemCount} items from backup.`);
+    setBackupMsg(restoreMode === 'merge'
+      ? `Merged: ${res.added} added, ${res.updated} updated from ${res.itemCount} entries.`
+      : `Restored ${res.itemCount} items from backup.`);
   };
   const [importJson, setImportJson] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -447,9 +450,21 @@ export function SettingsView() {
                   Restore {restoreInfo.itemCount} items?
                 </p>
                 <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">
-                  Backup made {new Date(restoreInfo.createdAt).toLocaleString()}. This replaces the
-                  vault on this device, and biometric unlock will need setting up again.
+                  Backup made {new Date(restoreInfo.createdAt).toLocaleString()}. Biometric unlock
+                  will need setting up again afterwards.
                 </p>
+
+                <div className="mt-3 space-y-2">
+                  <label className="flex cursor-pointer items-start gap-2 text-xs text-amber-900 dark:text-amber-200">
+                    <input type="radio" checked={restoreMode === 'merge'} onChange={() => setRestoreMode('merge')} className="mt-0.5 accent-amber-600" />
+                    <span><b>Merge</b> — keep what's here and add anything missing. Entries are
+                      matched by their MSec id, so the newer copy wins and nothing duplicates.</span>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-2 text-xs text-amber-900 dark:text-amber-200">
+                    <input type="radio" checked={restoreMode === 'replace'} onChange={() => setRestoreMode('replace')} className="mt-0.5 accent-amber-600" />
+                    <span><b>Replace</b> — discard this device's vault and use the backup exactly.</span>
+                  </label>
+                </div>
                 <input
                   type="password"
                   value={restorePassword}
@@ -463,7 +478,7 @@ export function SettingsView() {
                     disabled={backupBusy || !restorePassword}
                     className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-bold text-white hover:bg-amber-500 disabled:opacity-50"
                   >
-                    {backupBusy ? 'Restoring…' : 'Restore vault'}
+                    {backupBusy ? 'Restoring…' : restoreMode === 'merge' ? 'Merge into vault' : 'Replace vault'}
                   </button>
                   <button
                     onClick={() => { setRestoreInfo(null); setRestoreText(''); setRestorePassword(''); }}
@@ -477,6 +492,29 @@ export function SettingsView() {
 
             {backupErr && <p className="text-sm font-medium text-red-500">{backupErr}</p>}
             {backupMsg && <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">{backupMsg}</p>}
+
+            <details className="text-xs text-gray-500 dark:text-slate-500">
+              <summary className="cursor-pointer">Move to another MSec device without syncing</summary>
+              <p className="mt-2 mb-2 text-gray-600 dark:text-slate-400">
+                For manual transfer with no account and no cloud: the encrypted backup above is
+                the safe choice — restore it on the other device with <b>Merge</b> and entries
+                keep their identity, so you can move a vault back and forth as often as you like
+                without ever duplicating anything.
+              </p>
+              <p className="mb-2 text-amber-700 dark:text-amber-400">
+                This plain transfer file is the same data <b>unencrypted</b>. Only use it if you
+                cannot use the encrypted backup, and delete it as soon as you're done.
+              </p>
+              <button
+                onClick={() => {
+                  if (!confirm('This file contains all your passwords in plain, readable text. Continue?')) return;
+                  downloadFile(`MSec-transfer-${new Date().toISOString().slice(0,10)}.json`, exportTransfer());
+                }}
+                className="mb-3 rounded-md border border-gray-200 px-3 py-1.5 font-medium text-gray-600 hover:bg-gray-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+              >
+                Export MSec transfer file
+              </button>
+            </details>
 
             <details className="text-xs text-gray-500 dark:text-slate-500">
               <summary className="cursor-pointer">Export unencrypted (for moving to another app)</summary>
