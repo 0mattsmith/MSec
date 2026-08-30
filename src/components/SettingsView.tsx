@@ -7,6 +7,8 @@ import {
 } from '../lib/updater';
 import { downloadFile, backupFilename, inspectBackup } from '../lib/backup';
 import { parseImport, type ParsedImport } from '../lib/importers';
+import { analyseImport, type ImportAnalysis } from '../lib/dedupe';
+import { ImportReview } from './ImportReview';
 import { QrImport } from './QrImport';
 import type { ImportedTotp } from '../lib/otpimport';
 
@@ -98,52 +100,71 @@ export function SettingsView() {
   const [importError, setImportError] = useState('');
   const [showQr, setShowQr] = useState(false);
 
+  const [review, setReview] = useState<{ analysis: ImportAnalysis<any>; label: string; folders: string[] } | null>(null);
+
   const handleImportFile = async (file: File | undefined) => {
     setImportError('');
     setPreview(null);
     if (!file) return;
     const text = await file.text();
     const result = parseImport(text, file.name);
-    if (!result.ok) { setImportError(result.error || 'Could not read that file.'); return; }
-    setPreview(result);
+    if (!result.ok || !result.items) { setImportError(result.error || 'Could not read that file.'); return; }
+
+    // Compare against the vault before anything is written.
+    const analysis = analyseImport(result.items as any[], items);
+    setReview({
+      analysis,
+      label: `${result.formatLabel} file${result.skipped ? ` (${result.skipped} unsupported entries skipped)` : ''}`,
+      folders: result.folders || [],
+    });
   };
 
-  const confirmImport = () => {
-    if (!preview?.items) return;
-    (preview.folders || []).forEach((name) => addFolder(name));
-    preview.items.forEach((item) => {
-      const { folderName, ...rest } = item as any;
+  const commitReviewed = (chosen: any[]) => {
+    review?.folders.forEach((name) => addFolder(name));
+    chosen.forEach((item) => {
+      const { folderName, ...rest } = item;
       addItem(rest);
     });
-    setSuccessMsg(`Imported ${preview.items.length} items from ${preview.formatLabel}.`);
-    setPreview(null);
+    setSuccessMsg(chosen.length ? `Imported ${chosen.length} item${chosen.length === 1 ? '' : 's'}.` : 'Nothing imported.');
+    setReview(null);
     setTimeout(() => setSuccessMsg(''), 6000);
   };
 
   const handleQrImport = (codes: ImportedTotp[]) => {
-    codes.forEach((c) => addItem({
+    setShowQr(false);
+    if (codes.length === 0) return;
+    const incoming = codes.map((c) => ({
       type: 'login',
       title: c.title,
       username: c.username,
       totpSecret: c.secret,
       isFavorite: false,
-    } as any));
-    setShowQr(false);
-    if (codes.length) {
-      setSuccessMsg(`Added ${codes.length} authenticator code${codes.length === 1 ? '' : 's'}.`);
-      setTimeout(() => setSuccessMsg(''), 6000);
+    }));
+    const analysis = analyseImport(incoming as any[], items);
+    // Straight through when everything is new; otherwise let the user look.
+    if (analysis.duplicateCount === 0 && analysis.similarCount === 0) {
+      commitReviewedCodes(incoming);
+      return;
     }
+    setReview({ analysis, label: `${codes.length} scanned code${codes.length === 1 ? '' : 's'}`, folders: [] });
+  };
+
+  const commitReviewedCodes = (chosen: any[]) => {
+    chosen.forEach((item) => addItem(item));
+    setSuccessMsg(`Added ${chosen.length} authenticator code${chosen.length === 1 ? '' : 's'}.`);
+    setTimeout(() => setSuccessMsg(''), 6000);
   };
 
   // Kept for the legacy paste box (still handy for hand-edited JSON).
   const handleImport = () => {
     const result = parseImport(importJson, 'pasted.json');
-    if (!result.ok) { setImportError(result.error || 'Invalid data.'); return; }
-    (result.folders || []).forEach((name) => addFolder(name));
-    result.items?.forEach((item) => { const { folderName, ...rest } = item as any; addItem(rest); });
-    setSuccessMsg(`Imported ${result.items?.length} items.`);
+    if (!result.ok || !result.items) { setImportError(result.error || 'Invalid data.'); return; }
+    setReview({
+      analysis: analyseImport(result.items as any[], items),
+      label: 'Pasted JSON',
+      folders: result.folders || [],
+    });
     setImportJson('');
-    setTimeout(() => setSuccessMsg(''), 4000);
   };
 
   const handleExport = () => {
@@ -365,33 +386,6 @@ export function SettingsView() {
 
             {importError && <p className="text-sm font-medium text-red-500">{importError}</p>}
 
-            {preview?.ok && (
-              <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-500/30 dark:bg-indigo-500/10">
-                <p className="text-sm font-bold text-indigo-900 dark:text-indigo-200">
-                  {preview.formatLabel} file — {preview.items?.length} items ready to import
-                </p>
-                <p className="mt-1 text-xs text-indigo-800/80 dark:text-indigo-300/80">
-                  {preview.folders?.length ? `${preview.folders.length} folders. ` : ''}
-                  {preview.skipped ? `${preview.skipped} entries skipped (unsupported types). ` : ''}
-                  Items are added to your vault; nothing is replaced.
-                </p>
-                <ul className="mt-2 max-h-32 space-y-1 overflow-y-auto text-xs text-indigo-900/80 dark:text-indigo-200/80">
-                  {preview.items?.slice(0, 5).map((i, n) => (
-                    <li key={n} className="truncate">• {i.title}{i.username ? ` — ${i.username}` : ''}</li>
-                  ))}
-                  {(preview.items?.length || 0) > 5 && <li>…and {(preview.items?.length || 0) - 5} more</li>}
-                </ul>
-                <div className="mt-3 flex gap-2">
-                  <button onClick={confirmImport} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-500">
-                    Import {preview.items?.length} items
-                  </button>
-                  <button onClick={() => setPreview(null)} className="rounded-lg border border-indigo-300 px-4 py-2 text-sm font-medium text-indigo-900 dark:border-indigo-500/30 dark:text-indigo-200">
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-
             {successMsg && <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{successMsg}</p>}
 
             <details className="text-xs text-gray-500 dark:text-slate-500">
@@ -567,6 +561,14 @@ export function SettingsView() {
         </div>
       </div>
       {showQr && <QrImport onImport={handleQrImport} onClose={() => setShowQr(false)} />}
+      {review && (
+        <ImportReview
+          analysis={review.analysis}
+          sourceLabel={review.label}
+          onConfirm={commitReviewed}
+          onCancel={() => setReview(null)}
+        />
+      )}
     </div>
   );
 }

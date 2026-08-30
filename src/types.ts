@@ -28,6 +28,8 @@ export interface VaultItem {
   deletedAt?: number | null;
   notes?: string;
   customFields?: CustomField[];
+  /** ID from the app this was imported from — lets a re-import be recognised. */
+  externalId?: string;
   
   // Login fields
   username?: string;

@@ -97,9 +97,11 @@ function normaliseTotp(value: string): string {
 function toItem(fields: {
   title?: string; username?: string; password?: string; url?: string;
   notes?: string; totp?: string; type?: ItemCategory; folderName?: string;
+  externalId?: string;
 }): Omit<VaultItem, 'id' | 'createdAt' | 'updatedAt'> & { folderName?: string } {
   return {
     type: fields.type || 'login',
+    externalId: fields.externalId || undefined,
     title: (fields.title || fields.url || fields.username || 'Untitled').slice(0, 200),
     username: fields.username || undefined,
     password: fields.password || undefined,
@@ -195,12 +197,13 @@ export function parseImport(text: string, filename = ''): ParsedImport {
               notes: raw.notes,
               totp: raw.login?.totp,
               folderName,
+              externalId: raw.id ? `bitwarden:${raw.id}` : undefined,
             }));
           } else if (kind === 2) {
-            items.push(toItem({ title: raw.name, notes: raw.notes, type: 'note', folderName }));
+            items.push(toItem({ title: raw.name, notes: raw.notes, type: 'note', folderName, externalId: raw.id ? `bitwarden:${raw.id}` : undefined }));
           } else if (kind === 3 && raw.card) {
             items.push({
-              ...toItem({ title: raw.name, notes: raw.notes, type: 'card', folderName }),
+              ...toItem({ title: raw.name, notes: raw.notes, type: 'card', folderName, externalId: raw.id ? `bitwarden:${raw.id}` : undefined }),
               cardNumber: raw.card.number,
               cardExpiry: raw.card.expMonth && raw.card.expYear
                 ? `${String(raw.card.expMonth).padStart(2, '0')}/${String(raw.card.expYear).slice(-2)}`
@@ -222,6 +225,7 @@ export function parseImport(text: string, filename = ''): ParsedImport {
             notes: raw.notes,
             totp: raw.totpSecret,
             type: raw.type,
+            externalId: raw.externalId || (raw.id ? `msec:${raw.id}` : undefined),
           }));
         }
       }
