@@ -136,6 +136,8 @@ interface VaultContextType extends AppState {
   setActiveFolderId: (folderId: string | null) => void;
   setSelectedItemId: (itemId: string | null) => void;
   addItem: (item: Omit<VaultItem, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  /** Add many items at once — importing one-by-one loses all but the last. */
+  addItems: (items: Partial<VaultItem>[]) => Promise<{ added: number; failed: number }>;
   updateItem: (id: string, updates: Partial<VaultItem>) => void;
   moveToTrash: (id: string) => void;
   restoreFromTrash: (id: string) => void;
@@ -605,14 +607,42 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
             createdAt: incoming.createdAt || Date.now(),
             updatedAt: Date.now(),
           };
+          // Functional update: building from the captured `state` would make
+          // consecutive calls overwrite each other.
+          setState((prev) => ({ ...prev, items: [...prev.items, newItem], selectedItemId: id }));
           if (currentUser) {
             try {
               await putItemDoc(newItem);
-              updateState({ selectedItemId: id });
             } catch (error) { handleFirestoreError(error, OperationType.CREATE, `users/${currentUser.uid}/items`); }
-          } else {
-            updateState({ items: [...state.items, newItem], selectedItemId: id });
           }
+        },
+
+        addItems: async (incoming) => {
+          const now = Date.now();
+          const prepared: VaultItem[] = incoming.map((item) => ({
+            ...(item as VaultItem),
+            id: item.id || crypto.randomUUID(),
+            createdAt: item.createdAt || now,
+            updatedAt: now,
+          }));
+          if (prepared.length === 0) return { added: 0, failed: 0 };
+
+          // One state update for the whole batch.
+          setState((prev) => ({ ...prev, items: [...prev.items, ...prepared] }));
+
+          let failed = 0;
+          if (currentUser) {
+            // Written individually so one rejected document doesn't lose the rest.
+            for (const item of prepared) {
+              try {
+                await putItemDoc(item);
+              } catch (e) {
+                failed++;
+                console.error('Failed to sync imported item', item.title, e);
+              }
+            }
+          }
+          return { added: prepared.length - failed, failed };
         },
 
         updateItem: async (id, updates) => {
@@ -672,7 +702,7 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
           if (currentUser) {
             try { await putFolderDoc(newFolder); } catch (err) { handleFirestoreError(err, OperationType.CREATE, null); }
           } else {
-            updateState({ folders: [...state.folders, newFolder] });
+            setState((prev) => ({ ...prev, folders: [...prev.folders, newFolder] }));
           }
         },
 

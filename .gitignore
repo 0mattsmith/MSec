@@ -10,6 +10,10 @@ src-tauri/target/
 src-tauri/gen/
 src-tauri/icons/
 
+# Updater signing key — NEVER commit
+msec-updater.key
+msec-updater.key.pub
+
 # Android signing — NEVER commit these
 *.jks
 *.pfx

@@ -3,7 +3,7 @@ import { useVault } from '../store/VaultContext';
 import { Download, Upload, Trash2, ShieldCheck, Check, Cloud, Fingerprint, ArrowUpCircle, RefreshCw, Lock, FileUp, ScanLine } from 'lucide-react';
 import {
   APP_VERSION, checkForUpdate, applyUpdate, detectPlatform,
-  updateActionLabel, type UpdateInfo,
+  updateActionLabel, type UpdateInfo, type UpdateProgress,
 } from '../lib/updater';
 import { downloadFile, backupFilename, inspectBackup } from '../lib/backup';
 import { parseImport, type ParsedImport } from '../lib/importers';
@@ -13,7 +13,7 @@ import { QrImport } from './QrImport';
 import type { ImportedTotp } from '../lib/otpimport';
 
 export function SettingsView() {
-  const { items, folders, updateItem, deleteItemPermanently, clearStorage, addFolder, addItem, settings, updateSettings, currentUser, signInWithGoogle, signOutUser,
+  const { items, folders, updateItem, deleteItemPermanently, clearStorage, addFolder, addItem, addItems, settings, updateSettings, currentUser, signInWithGoogle, signOutUser,
     biometricReady, biometricSupported, enableBiometric, turnOffBiometric,
     exportBackup, importBackup, exportTransfer } = useVault();
 
@@ -86,6 +86,7 @@ export function SettingsView() {
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [checking, setChecking] = useState(false);
   const [checkedMsg, setCheckedMsg] = useState('');
+  const [updateProgress, setUpdateProgress] = useState<UpdateProgress | null>(null);
 
   useEffect(() => { checkForUpdate().then(setUpdate); }, []);
 
@@ -122,15 +123,19 @@ export function SettingsView() {
     });
   };
 
-  const commitReviewed = (chosen: any[]) => {
+  const commitReviewed = async (chosen: any[]) => {
     review?.folders.forEach((name) => addFolder(name));
-    chosen.forEach((item) => {
-      const { folderName, ...rest } = item;
-      addItem(rest);
-    });
-    setSuccessMsg(chosen.length ? `Imported ${chosen.length} item${chosen.length === 1 ? '' : 's'}.` : 'Nothing imported.');
+    // One batched write — adding these one at a time loses all but the last.
+    const stripped = chosen.map(({ folderName, ...rest }) => rest);
+    const result = await addItems(stripped);
     setReview(null);
-    setTimeout(() => setSuccessMsg(''), 6000);
+    setSuccessMsg(
+      result.added === 0
+        ? 'Nothing imported.'
+        : `Imported ${result.added} item${result.added === 1 ? '' : 's'}.` +
+          (result.failed ? ` ${result.failed} could not be synced — they are saved on this device.` : ''),
+    );
+    setTimeout(() => setSuccessMsg(''), 8000);
   };
 
   const handleQrImport = (codes: ImportedTotp[]) => {
@@ -152,9 +157,9 @@ export function SettingsView() {
     setReview({ analysis, label: `${codes.length} scanned code${codes.length === 1 ? '' : 's'}`, folders: [] });
   };
 
-  const commitReviewedCodes = (chosen: any[]) => {
-    chosen.forEach((item) => addItem(item));
-    setSuccessMsg(`Added ${chosen.length} authenticator code${chosen.length === 1 ? '' : 's'}.`);
+  const commitReviewedCodes = async (chosen: any[]) => {
+    const result = await addItems(chosen);
+    setSuccessMsg(`Added ${result.added} authenticator code${result.added === 1 ? '' : 's'}.`);
     setTimeout(() => setSuccessMsg(''), 6000);
   };
 
@@ -305,13 +310,32 @@ export function SettingsView() {
                 )}
                 <button
                   onClick={async () => {
-                    const problem = await applyUpdate(update, platform);
+                    setCheckedMsg('');
+                    const problem = await applyUpdate(update, platform, setUpdateProgress);
+                    setUpdateProgress(null);
                     if (problem) setCheckedMsg(problem);
                   }}
                   className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-500"
                 >
-                  {updateActionLabel(platform)}
+                  {updateProgress
+                    ? updateProgress.stage === 'downloading'
+                      ? `Downloading${updateProgress.percent !== undefined ? ` ${updateProgress.percent}%` : '…'}`
+                      : updateProgress.stage === 'installing' ? 'Installing…'
+                      : updateProgress.stage === 'restarting' ? 'Restarting…' : 'Checking…'
+                    : updateActionLabel(platform)}
                 </button>
+                {platform === 'desktop-app' && (
+                  <p className="mt-2 text-xs text-indigo-800/70 dark:text-indigo-300/70">
+                    Downloads, verifies the signature and restarts into the new version — no
+                    installer to run.
+                  </p>
+                )}
+                {platform === 'android' && (
+                  <p className="mt-2 text-xs text-indigo-800/70 dark:text-indigo-300/70">
+                    Downloads inside the app, then Android asks you to confirm the install.
+                    That confirmation is required by the system for sideloaded apps.
+                  </p>
+                )}
               </div>
             ) : (
               checkedMsg && <p className="text-sm text-emerald-600 dark:text-emerald-400">{checkedMsg}</p>

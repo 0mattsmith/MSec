@@ -10,10 +10,20 @@
     {
       "identifier": "opener:allow-open-url",
       "allow": [
-        { "url": "https://github.com/*" },
-        { "url": "https://*.githubusercontent.com/*" },
-        { "url": "https://0mattsmith.github.io/*" }
+        {
+          "url": "https://github.com/*"
+        },
+        {
+          "url": "https://*.githubusercontent.com/*"
+        },
+        {
+          "url": "https://0mattsmith.github.io/*"
+        }
       ]
-    }
+    },
+    "updater:default",
+    "core:app:allow-version",
+    "upload:default",
+    "opener:allow-open-path"
   ]
 }

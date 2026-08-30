@@ -105,12 +105,73 @@ export function updateActionLabel(platform: Platform): string {
   }
 }
 
+export interface UpdateProgress {
+  stage: 'checking' | 'downloading' | 'installing' | 'restarting';
+  /** 0–100 where known. */
+  percent?: number;
+}
+
+/**
+ * Desktop: download, verify the signature and install without leaving the app,
+ * then relaunch into the new version. Returns null on success, or a message.
+ *
+ * The signature check is the point of the whole exercise — an unverified
+ * self-installing binary would be a gift to anyone able to tamper with the
+ * download.
+ */
+async function silentDesktopUpdate(onProgress?: (p: UpdateProgress) => void): Promise<string | null> {
+  try {
+    const { check } = await import('@tauri-apps/plugin-updater');
+    onProgress?.({ stage: 'checking' });
+
+    const update = await check();
+    if (!update) return 'No signed update is available yet.';
+
+    let downloaded = 0;
+    let total = 0;
+    await update.downloadAndInstall((event: any) => {
+      if (event.event === 'Started') {
+        total = event.data?.contentLength || 0;
+        onProgress?.({ stage: 'downloading', percent: 0 });
+      } else if (event.event === 'Progress') {
+        downloaded += event.data?.chunkLength || 0;
+        onProgress?.({
+          stage: 'downloading',
+          percent: total ? Math.min(99, Math.round((downloaded / total) * 100)) : undefined,
+        });
+      } else if (event.event === 'Finished') {
+        onProgress?.({ stage: 'installing', percent: 100 });
+      }
+    });
+
+    onProgress?.({ stage: 'restarting' });
+    const { relaunch } = await import('@tauri-apps/plugin-process');
+    await relaunch();
+    return null;
+  } catch (e: any) {
+    return `Automatic update failed: ${e?.message || e}`;
+  }
+}
+
 /**
  * Apply or start the update, however that works on this platform.
  * Returns an error message rather than throwing, so the UI can show what
  * went wrong instead of appearing to do nothing.
  */
-export async function applyUpdate(info: UpdateInfo, platform: Platform): Promise<string | null> {
+export async function applyUpdate(
+  info: UpdateInfo,
+  platform: Platform,
+  onProgress?: (p: UpdateProgress) => void,
+): Promise<string | null> {
+  // Desktop can update itself completely: verify, install, relaunch.
+  if (platform === 'desktop-app') {
+    const problem = await silentDesktopUpdate(onProgress);
+    if (!problem) return null;
+    // Signed updates may not be configured yet — fall back to the release page.
+    window.open(info.url, '_blank', 'noopener,noreferrer');
+    return problem;
+  }
+
   if (platform === 'web') {
     // The service worker caches a new build as soon as it sees one; asking it
     // to activate immediately and reloading is all that's needed.
@@ -128,6 +189,38 @@ export async function applyUpdate(info: UpdateInfo, platform: Platform): Promise
   const target = platform === 'android' && info.apkUrl ? info.apkUrl : info.url;
   const isTauri = '__TAURI__' in window || '__TAURI_INTERNALS__' in window;
   const problems: string[] = [];
+
+  // Android: download inside the app so the user isn't bounced to a browser,
+  // then hand the file to the system installer. Android always shows its own
+  // confirmation for sideloaded installs — that dialog cannot be skipped
+  // without being a device-owner or Play Store install.
+  if (platform === 'android' && info.apkUrl) {
+    try {
+      onProgress?.({ stage: 'downloading', percent: 0 });
+      const { download } = await import('@tauri-apps/plugin-upload');
+      const { appCacheDir, join } = await import('@tauri-apps/api/path');
+      const dest = await join(await appCacheDir(), `MSec-${info.version}.apk`);
+
+      let total = 0;
+      let got = 0;
+      await download(info.apkUrl, dest, (progress: any) => {
+        total = progress.total || total;
+        got += progress.progressTotal ?? progress.progress ?? 0;
+        onProgress?.({
+          stage: 'downloading',
+          percent: total ? Math.min(99, Math.round((got / total) * 100)) : undefined,
+        });
+      });
+
+      onProgress?.({ stage: 'installing', percent: 100 });
+      const { openPath } = await import('@tauri-apps/plugin-opener');
+      await openPath(dest);
+      return null;
+    } catch (e: any) {
+      problems.push(`in-app download: ${e?.message || e}`);
+      // Fall through to the browser download below.
+    }
+  }
 
   // Inside the Tauri webview, window.open is intercepted and the link can
   // silently do nothing — the opener plugin hands the URL to the OS browser,

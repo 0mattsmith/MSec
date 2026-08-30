@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Download, X, ArrowUpCircle, AlertTriangle } from 'lucide-react';
 import {
   checkForUpdate, applyUpdate, skipVersion, detectPlatform,
-  updateActionLabel, type UpdateInfo,
+  updateActionLabel, type UpdateInfo, type UpdateProgress,
 } from '../lib/updater';
 
 /*
@@ -18,6 +18,7 @@ export function UpdateBanner() {
   const [dismissed, setDismissed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [progress, setProgress] = useState<UpdateProgress | null>(null);
   const platform = detectPlatform();
 
   useEffect(() => {
@@ -31,10 +32,18 @@ export function UpdateBanner() {
   const handleUpdate = async () => {
     setBusy(true);
     setError('');
-    const problem = await applyUpdate(info, platform);
+    const problem = await applyUpdate(info, platform, setProgress);
     setBusy(false);
+    setProgress(null);
     if (problem) setError(problem);
   };
+
+  const stageLabel = progress && {
+    checking: 'Checking…',
+    downloading: progress.percent !== undefined ? `Downloading ${progress.percent}%` : 'Downloading…',
+    installing: 'Installing…',
+    restarting: 'Restarting…',
+  }[progress.stage];
 
   return (
     // The wrapper ignores pointer events so it can never block the UI beneath;
@@ -66,7 +75,7 @@ export function UpdateBanner() {
             style={{ touchAction: 'manipulation' }}
           >
             <Download className="h-3.5 w-3.5" />
-            {busy ? 'Opening…' : updateActionLabel(platform)}
+            {stageLabel || (busy ? 'Working…' : updateActionLabel(platform))}
           </button>
           <button
             type="button"
@@ -79,6 +88,15 @@ export function UpdateBanner() {
             <X className="h-4 w-4" />
           </button>
         </div>
+
+        {progress && progress.percent !== undefined && (
+          <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-slate-700">
+            <div
+              className="h-full bg-indigo-600 transition-all duration-200 dark:bg-indigo-400"
+              style={{ width: `${progress.percent}%` }}
+            />
+          </div>
+        )}
 
         {error && (
           <p className="mt-2 flex items-start rounded-lg bg-amber-50 p-2 text-[11px] leading-relaxed text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">

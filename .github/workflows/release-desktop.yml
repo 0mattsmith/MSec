@@ -51,11 +51,16 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signs each installer and emits latest.json, which installed copies
+          # verify against the public key baked into the app.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "MSec ${{ github.ref_name }}"
           releaseBody: "See the attached installers for Windows, macOS (Universal), and Linux."
           # Published immediately so the in-app updater can see it.
           releaseDraft: false
+          includeUpdaterJson: true
           prerelease: false
           args: ${{ matrix.args }}
