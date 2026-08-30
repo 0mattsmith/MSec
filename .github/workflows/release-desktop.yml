@@ -48,6 +48,22 @@ jobs:
       - name: Generate Tauri icons
         run: npx tauri icon public/icons/icon-1024.png
 
+      # createUpdaterArtifacts makes the bundler sign every installer and emit
+      # latest.json. It hard-fails when no signing key is present, so it is
+      # switched on only when the secret actually exists - a missing secret
+      # should degrade to "no self-update", not "no release".
+      - name: Enable signed update artifacts when a key is available
+        shell: bash
+        env:
+          HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        run: |
+          if [ "$HAS_KEY" = "true" ]; then
+            node -e "const fs=require('fs'),f='src-tauri/tauri.conf.json',c=JSON.parse(fs.readFileSync(f,'utf8'));c.bundle.createUpdaterArtifacts=true;fs.writeFileSync(f,JSON.stringify(c,null,2));"
+            echo "Signing key present - updater artifacts enabled."
+          else
+            echo "::warning::TAURI_SIGNING_PRIVATE_KEY is not set. Installers will build, but no signed update artifacts or latest.json will be produced, so in-app desktop updates stay disabled."
+          fi
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

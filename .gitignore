@@ -20,3 +20,8 @@ msec-updater.key.pub
 *.keystore
 keystore-base64.txt
 keystore.properties
+
+# Tauri updater signing key - never commit this
+updater-private-key.txt
+*.key
+*.key.pub

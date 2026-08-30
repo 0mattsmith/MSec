@@ -21,7 +21,6 @@
         }
       ]
     },
-    "updater:default",
     "core:app:allow-version",
     "upload:default",
     "opener:allow-open-path"

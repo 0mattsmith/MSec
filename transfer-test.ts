@@ -56,7 +56,7 @@ check([...byId.values()].length === 2, 'merge did not create a duplicate row');
 check((byId.get('aaaa-1111') as any).password === 'newer', 'newer edit won the merge');
 
 // Older incoming copy must NOT clobber a newer local edit
-const byId2 = new Map(vaultA.map(i => [i.id, { ...i, password: 'local-newer', updatedAt: 500 }]));
+const byId2 = new Map<string, VaultItem>(vaultA.map(i => [i.id, { ...i, password: 'local-newer', updatedAt: 500 }]));
 const stale = { ...vaultA[0], password: 'stale', updatedAt: 200 } as VaultItem;
 const mine2 = byId2.get(stale.id)!;
 if (stale.updatedAt > mine2.updatedAt) byId2.set(stale.id, stale);
