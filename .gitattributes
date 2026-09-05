@@ -1,0 +1,27 @@
+# The repo is edited on Windows (push.ps1 writes CRLF via Set-Content) but built
+# on Linux runners and inside a container. Normalising here stops the two from
+# fighting, and stops whole files showing up as changed when only the line
+# endings moved.
+* text=auto eol=lf
+
+# A CR at the end of a shebang line is fatal: the kernel looks for an
+# interpreter literally named "/bin/sh\r" and reports "not found".
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+*.conf      text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+gradlew     text eol=lf
+
+# PowerShell is happiest with CRLF and is only ever run on Windows.
+*.ps1       text eol=crlf
+*.bat       text eol=crlf
+
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.ico     binary
+*.icns    binary
+*.keystore binary
+*.jks     binary
+*.apk     binary

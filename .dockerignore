@@ -1,0 +1,34 @@
+# Build context hygiene — and, more importantly, a guarantee that secrets never
+# reach a layer. Anything copied in is permanently readable by anyone who pulls
+# the image, even if a later layer deletes it.
+updater-private-key.txt
+*.key
+*.key.pub
+*.keystore
+*.jks
+keystore.properties
+.env
+.env.*
+
+.git
+.github
+node_modules
+dist
+build
+
+# Native app sources: nothing in the web image needs them.
+src-tauri/target
+src-tauri/gen
+android
+extension
+
+*.md
+!README.md
+.vscode
+.idea
+Dockerfile
+.dockerignore
+docker-compose*.yml
+push.ps1
+new-keystore.ps1
+new-updater-key.ps1

@@ -22,6 +22,19 @@ const LS_SKIPPED = 'msec_update_skipped';
 export const APP_VERSION: string =
   (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0');
 
+/**
+ * Where this build is deployed. The Docker image sets DEPLOY_TARGET=selfhosted.
+ * It matters because a self-hosted copy is whatever version the operator last
+ * pulled — reloading the page cannot change that, so offering "Reload to
+ * update" would be a button that permanently does nothing.
+ */
+export const DEPLOY_TARGET: string =
+  (typeof __DEPLOY_TARGET__ !== 'undefined' ? __DEPLOY_TARGET__ : 'web');
+
+export function isSelfHosted(): boolean {
+  return DEPLOY_TARGET === 'selfhosted';
+}
+
 export interface UpdateInfo {
   version: string;
   notes: string;
@@ -101,7 +114,7 @@ export function updateActionLabel(platform: Platform): string {
     case 'android': return 'Download APK';
     case 'desktop-app': return 'Get the installer';
     case 'ios': return 'View release';
-    default: return 'Reload to update';
+    default: return isSelfHosted() ? 'View release' : 'Reload to update';
   }
 }
 
@@ -170,6 +183,13 @@ export async function applyUpdate(
     // Signed updates may not be configured yet — fall back to the release page.
     window.open(info.url, '_blank', 'noopener,noreferrer');
     return problem;
+  }
+
+  if (platform === 'web' && isSelfHosted()) {
+    // The container serves whatever build was baked into the image, so the
+    // only way forward is for whoever runs it to pull a newer one.
+    window.open(info.url, '_blank', 'noopener,noreferrer');
+    return null;
   }
 
   if (platform === 'web') {
@@ -258,4 +278,6 @@ export async function applyUpdate(
 declare global {
   // eslint-disable-next-line no-var
   var __APP_VERSION__: string;
+  // eslint-disable-next-line no-var
+  var __DEPLOY_TARGET__: string;
 }

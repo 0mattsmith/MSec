@@ -13,6 +13,9 @@ export default defineConfig(() => {
     // Lets the in-app updater compare against the released version.
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version),
+      // 'selfhosted' when built into the Docker image. A container can't
+      // update itself by reloading, so the updater says so instead.
+      __DEPLOY_TARGET__: JSON.stringify(process.env.DEPLOY_TARGET || 'web'),
     },
     plugins: [react(), tailwindcss()],
     resolve: {

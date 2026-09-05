@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Download, X, ArrowUpCircle, AlertTriangle } from 'lucide-react';
 import {
-  checkForUpdate, applyUpdate, skipVersion, detectPlatform,
+  checkForUpdate, applyUpdate, skipVersion, detectPlatform, isSelfHosted,
   updateActionLabel, type UpdateInfo, type UpdateProgress,
 } from '../lib/updater';
 
@@ -63,7 +63,9 @@ export function UpdateBanner() {
               {platform === 'android'
                 ? 'Download the new APK to update'
                 : platform === 'web'
-                  ? 'Reload to get the latest version'
+                  ? isSelfHosted()
+                    ? 'Pull the new container image to update'
+                    : 'Reload to get the latest version'
                   : 'Open the release to get the installer'}
             </p>
           </div>

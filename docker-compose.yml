@@ -1,0 +1,122 @@
+# MSec — self-hosted.
+#
+# Works as a plain `docker compose up -d`, and doubles as a CasaOS app file:
+# in CasaOS go to the App Store -> Custom Install -> Import, and paste this.
+#
+# The vault is encrypted in your browser before anything is stored, so this
+# container never sees a plaintext secret. It only serves static files.
+name: msec
+
+services:
+  msec:
+    image: ghcr.io/0mattsmith/msec:latest
+    container_name: msec
+    restart: unless-stopped
+
+    ports:
+      # HTTPS. This is the one you actually use.
+      - "8443:8443"
+      # HTTP, redirects to HTTPS. Handy so a bookmark without the scheme works.
+      - "8080:8080"
+
+    environment:
+      # auto = self-signed certificate generated on first boot.
+      # off  = plain HTTP only; ONLY use this behind a proxy that does TLS.
+      MSEC_TLS: auto
+      # Goes into the certificate's CN and SAN list.
+      MSEC_HOSTNAME: msec.local
+      # Add the address you actually browse to, or the certificate warning
+      # will be the harsher "wrong host" kind. Comma-separated OpenSSL SANs.
+      #   MSEC_EXTRA_SAN: "IP:192.168.1.50,DNS:casaos.local"
+      MSEC_EXTRA_SAN: ""
+      # The published HTTPS port, used when redirecting from HTTP. Change this
+      # if you remap 8443 to something else above.
+      MSEC_PUBLIC_HTTPS_PORT: "8443"
+      # Set to off only if a Content-Security-Policy is blocking something you
+      # have deliberately repointed the app at.
+      MSEC_CSP: "on"
+
+    volumes:
+      # Keeps the certificate stable across restarts — otherwise every device
+      # would have to re-accept a new one. Drop your own msec.crt / msec.key
+      # in here to use a properly trusted certificate instead.
+      - /DATA/AppData/msec/certs:/certs
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+    security_opt:
+      - no-new-privileges:true
+
+    x-casaos:
+      envs:
+        - container: MSEC_TLS
+          description:
+            en_us: "auto = generate a self-signed certificate. off = plain HTTP, only safe behind a reverse proxy that terminates TLS."
+        - container: MSEC_HOSTNAME
+          description:
+            en_us: "Hostname written into the certificate, e.g. msec.local or casaos.local."
+        - container: MSEC_EXTRA_SAN
+          description:
+            en_us: "Extra certificate names for the address you browse to, e.g. IP:192.168.1.50,DNS:casaos.local"
+        - container: MSEC_PUBLIC_HTTPS_PORT
+          description:
+            en_us: "The HTTPS port as published on the host. Only change this if you remapped 8443."
+        - container: MSEC_CSP
+          description:
+            en_us: "Content-Security-Policy. Leave on unless you have repointed the app at a different backend."
+      ports:
+        - container: "8443"
+          description:
+            en_us: "HTTPS. Use this one."
+        - container: "8080"
+          description:
+            en_us: "HTTP, redirects to HTTPS."
+      volumes:
+        - container: /certs
+          description:
+            en_us: "TLS certificate and key. Persisted so devices don't have to re-trust it on every restart."
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: msec
+  author: 0mattsmith
+  developer: 0mattsmith
+  icon: https://raw.githubusercontent.com/0mattsmith/MSec/main/public/icons/icon-512.png
+  thumbnail: https://raw.githubusercontent.com/0mattsmith/MSec/main/public/icons/icon-512.png
+  title:
+    en_us: MSec
+  tagline:
+    en_us: Zero-knowledge password manager and authenticator
+  category: Security
+  port_map: "8443"
+  scheme: https
+  index: /
+  description:
+    en_us: |
+      MSec is a password manager and TOTP authenticator that encrypts your vault
+      in the browser with AES-256-GCM, using a key derived from your master
+      password via PBKDF2-SHA256 (600,000 iterations). The server never sees a
+      key or a plaintext secret — self-hosting it means the ciphertext never
+      leaves your network either.
+
+      Includes TOTP codes, a password generator, encrypted backups, and import
+      from Bitwarden, LastPass, 1Password, KeePass, Chrome and Google
+      Authenticator QR codes.
+  tips:
+    before_install:
+      en_us: |
+        MSec is served over HTTPS on purpose. Browsers only expose the Web
+        Crypto API and WebAuthn in a secure context, so over plain HTTP the app
+        cannot unlock a vault at all.
+
+        On first boot the container generates a self-signed certificate, so
+        every device will ask you to accept it once. Set MSEC_EXTRA_SAN to the
+        address you actually browse to (for example IP:192.168.1.50) before the
+        first start, or delete /DATA/AppData/msec/certs afterwards to reissue.
