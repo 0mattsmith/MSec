@@ -38,11 +38,31 @@ if ($DesktopClientId) {
         exit 1
     }
     $config.desktop.clientId = $DesktopClientId
-    if ($DesktopClientSecret) { $config.desktop.clientSecret = $DesktopClientSecret }
-    Write-Host "Desktop client set." -ForegroundColor Green
-    if (-not $DesktopClientSecret -and $config.desktop.clientSecret -like "PASTE_*") {
-        Write-Host "  WARNING: no client secret set. Google requires one for 'Desktop app' clients," -ForegroundColor Yellow
-        Write-Host "           so the token exchange will fail without it." -ForegroundColor Yellow
+    Write-Host "Desktop client ID set." -ForegroundColor Green
+
+    if ($DesktopClientSecret) {
+        # The secret goes to .env.local, never oauth-config.json: that file is
+        # tracked, this repository is public, and GitHub's push protection
+        # rejects a GOCSPX- value outright.
+        $envPath = ".env.local"
+        $line = "VITE_GOOGLE_DESKTOP_CLIENT_SECRET=$DesktopClientSecret"
+        if (Test-Path $envPath) {
+            $lines = @(Get-Content $envPath | Where-Object { $_ -notmatch '^VITE_GOOGLE_DESKTOP_CLIENT_SECRET=' })
+            $lines += $line
+            Set-Content $envPath ($lines -join "`n")
+        } else {
+            Set-Content $envPath $line
+        }
+        Write-Host "Desktop client secret written to .env.local (gitignored)." -ForegroundColor Green
+        Write-Host ""
+        Write-Host "  CI builds need it too. Add it as a repository secret named" -ForegroundColor Cyan
+        Write-Host "  GOOGLE_DESKTOP_CLIENT_SECRET at:" -ForegroundColor Cyan
+        Write-Host "  https://github.com/0mattsmith/MSec/settings/secrets/actions" -ForegroundColor Cyan
+        Write-Host "  Without it, released desktop builds will say sign-in isn't configured." -ForegroundColor DarkGray
+    } else {
+        Write-Host "  NOTE: no -DesktopClientSecret given. Google requires one for 'Desktop app'" -ForegroundColor Yellow
+        Write-Host "        clients, so sign-in will report it as missing until you set" -ForegroundColor Yellow
+        Write-Host "        VITE_GOOGLE_DESKTOP_CLIENT_SECRET in .env.local." -ForegroundColor Yellow
     }
 }
 

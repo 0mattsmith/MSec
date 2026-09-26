@@ -8,9 +8,9 @@
 //   Firefox: the URL printed by the popup's "Show redirect URI" link
 // then paste the client ID here.
 const MSEC_CONFIG = {
-  FIREBASE_API_KEY: "AIzaSyCBhuCjQC_h0-FAXMBz_3wIHw4CQHU0lyA",
-  FIREBASE_PROJECT_ID: "golden-fountain-w6tp2",
-  FIRESTORE_DATABASE_ID: "ai-studio-1df2f1e2-43f2-47f6-aed6-5f067420f398",
+  FIREBASE_API_KEY: "AIzaSyCwa-xwhDYAkw_7RkB38v9hlaeRpMHYuWA",
+  FIREBASE_PROJECT_ID: "m--sec",
+  FIRESTORE_DATABASE_ID: "(default)",
   OAUTH_CLIENT_ID: "PASTE_YOUR_OAUTH_CLIENT_ID.apps.googleusercontent.com",
   AUTO_LOCK_MINUTES: 10
 };

@@ -183,7 +183,15 @@ export function clientFor(platform: Platform): ClientConfig | null {
   const cfg: any = oauthConfig;
   const entry = platform === 'android' ? cfg.android : cfg.desktop;
   if (!entry?.clientId || PLACEHOLDER.test(entry.clientId)) return null;
-  return { clientId: entry.clientId, clientSecret: entry.clientSecret && !PLACEHOLDER.test(entry.clientSecret) ? entry.clientSecret : undefined };
+
+  // Client IDs are public and live in the tracked config. The desktop secret
+  // comes from the environment instead: this repository is public, and GitHub
+  // blocks pushes containing a GOCSPX- value. Android clients have no secret.
+  const secret = platform === 'android'
+    ? undefined
+    : (import.meta.env?.VITE_GOOGLE_DESKTOP_CLIENT_SECRET as string | undefined) || undefined;
+
+  return { clientId: entry.clientId, clientSecret: secret };
 }
 
 export function oauthConfigured(platform: Platform = detectPlatform()): boolean {
@@ -194,6 +202,10 @@ const NOT_CONFIGURED =
   'Google sign-in is not set up for this build yet. Create an OAuth client in ' +
   'Google Cloud Console and fill in oauth-config.json — see SYNC.md. Your vault ' +
   'still works without it; sync is the only thing that needs an account.';
+
+const NO_SECRET =
+  'This build has a desktop client ID but no client secret, which Google requires ' +
+  'for desktop clients. Set VITE_GOOGLE_DESKTOP_CLIENT_SECRET and rebuild — see SYNC.md.';
 
 // ---------- Platform flows ----------
 
@@ -301,6 +313,7 @@ export async function nativeGoogleSignIn(platform: Platform = detectPlatform()):
   }
   const client = clientFor(platform);
   if (!client) return { ok: false, error: NOT_CONFIGURED };
+  if (platform !== 'android' && !client.clientSecret) return { ok: false, error: NO_SECRET };
 
   return platform === 'android' ? androidFlow(client) : desktopFlow(client);
 }

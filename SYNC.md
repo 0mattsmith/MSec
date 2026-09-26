@@ -90,6 +90,19 @@ desktop clients even though it ships inside the binary — RFC 8252 §8.5 is
 explicit that it isn't confidential, and PKCE is what actually protects the
 exchange.
 
+**Copy both before closing the dialog**, or use its Download JSON button.
+
+The client ID goes into `oauth-config.json`, which is tracked — client IDs are
+public by design. The secret does **not**: `set-oauth-client.ps1` writes it to
+`.env.local`, which is gitignored. This repository is public, and GitHub's push
+protection rejects a `GOCSPX-` value outright. It also needs adding as a
+repository secret named `GOOGLE_DESKTOP_CLIENT_SECRET` so CI builds pick it up:
+
+> Settings → Secrets and variables → Actions → New repository secret
+
+Without it, released desktop builds say sign-in isn't configured rather than
+failing at the token exchange.
+
 ### 3. Create the Android OAuth client
 
 Same place, **Create credentials → OAuth client ID**:
