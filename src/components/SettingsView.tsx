@@ -4,6 +4,8 @@ import { Download, Upload, Trash2, ShieldCheck, Check, Cloud, Fingerprint, Arrow
 import {
   APP_VERSION, checkForUpdate, applyUpdate, detectPlatform,
   updateActionLabel, type UpdateInfo, type UpdateProgress,
+  isSelfHosted,
+  SELF_HOSTED_UPDATE_COMMAND,
 } from '../lib/updater';
 import { downloadFile, backupFilename, inspectBackup } from '../lib/backup';
 import { parseImport, SUPPORTED_SOURCES, type ParsedImport } from '../lib/importers';
@@ -318,6 +320,7 @@ export function SettingsView() {
                     setUpdateProgress(null);
                     if (problem) setCheckedMsg(problem);
                   }}
+                  hidden={isSelfHosted() && platform === 'web'}
                   className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-500"
                 >
                   {updateProgress
@@ -327,6 +330,34 @@ export function SettingsView() {
                       : updateProgress.stage === 'restarting' ? 'Restarting…' : 'Checking…'
                     : updateActionLabel(platform)}
                 </button>
+                {isSelfHosted() && platform === 'web' && (
+                  <div className="mt-3 rounded-lg border border-indigo-200 bg-white/60 p-3 dark:border-indigo-500/30 dark:bg-[#121418]/60">
+                    <p className="text-xs text-indigo-800/80 dark:text-indigo-300/80">
+                      A container can&rsquo;t update itself from the browser. Run this where MSec
+                      is hosted, then reload:
+                    </p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <code className="flex-1 overflow-x-auto rounded bg-gray-900 px-2 py-1.5 font-mono text-[11px] text-slate-100">
+                        {SELF_HOSTED_UPDATE_COMMAND}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard?.writeText(SELF_HOSTED_UPDATE_COMMAND)
+                            .then(() => setCheckedMsg('Command copied.'))
+                            .catch(() => setCheckedMsg(SELF_HOSTED_UPDATE_COMMAND));
+                        }}
+                        className="flex-shrink-0 rounded-md border border-gray-200 px-2 py-1.5 text-[11px] font-medium text-gray-700 hover:bg-gray-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    <p className="mt-2 text-[11px] text-indigo-800/60 dark:text-indigo-300/60">
+                      Prefer it hands-off? Add Watchtower to your compose file and it will pull
+                      new images for you &mdash; see DOCKER.md.
+                    </p>
+                  </div>
+                )}
                 {platform === 'desktop-app' && (
                   <p className="mt-2 text-xs text-indigo-800/70 dark:text-indigo-300/70">
                     Downloads, verifies the signature and restarts into the new version — no

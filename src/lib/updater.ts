@@ -31,6 +31,13 @@ export const APP_VERSION: string =
 export const DEPLOY_TARGET: string =
   (typeof __DEPLOY_TARGET__ !== 'undefined' ? __DEPLOY_TARGET__ : 'web');
 
+/** The command that actually updates a self-hosted instance. */
+export const SELF_HOSTED_UPDATE_COMMAND = 'docker compose pull && docker compose up -d';
+
+const SELF_HOSTED_UPDATE_HINT =
+  'A container cannot update itself from the browser. Run ' +
+  `"${SELF_HOSTED_UPDATE_COMMAND}" where MSec is hosted, then reload this page.`;
+
 export function isSelfHosted(): boolean {
   return DEPLOY_TARGET === 'selfhosted';
 }
@@ -114,7 +121,7 @@ export function updateActionLabel(platform: Platform): string {
     case 'android': return 'Download APK';
     case 'desktop-app': return 'Get the installer';
     case 'ios': return 'View release';
-    default: return isSelfHosted() ? 'View release' : 'Reload to update';
+    default: return isSelfHosted() ? 'How to update' : 'Reload to update';
   }
 }
 
@@ -186,10 +193,10 @@ export async function applyUpdate(
   }
 
   if (platform === 'web' && isSelfHosted()) {
-    // The container serves whatever build was baked into the image, so the
-    // only way forward is for whoever runs it to pull a newer one.
-    window.open(info.url, '_blank', 'noopener,noreferrer');
-    return null;
+    // Nothing the page can do: a web page cannot pull a container image, and
+    // sending the user to a release page full of desktop installers tells them
+    // nothing useful. The UI shows the command instead - see SELF_HOSTED_UPDATE.
+    return SELF_HOSTED_UPDATE_HINT;
   }
 
   if (platform === 'web') {

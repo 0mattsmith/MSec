@@ -144,6 +144,17 @@ exactly this reason.
 docker compose pull && docker compose up -d
 ```
 
+The in-app update check still works — it tells you when a newer release exists
+and shows you that command. It can't apply it: a web page has no way to pull a
+container image, and it would be dishonest to present a button that pretends
+otherwise.
+
+If you'd rather it were automatic, `docker-compose.yml` has a commented-out
+Watchtower service that pulls new MSec images on a schedule. Read the note above
+it first — it hands a container the ability to restart your password manager
+whenever the registry serves something new, which is convenience and
+supply-chain exposure in the same move.
+
 `:latest` follows version tags. `:edge` follows `main` if you want the bleeding
 edge. Pin `:0.1` or `:0.1.15` if you'd rather updates be deliberate.
 

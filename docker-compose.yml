@@ -81,6 +81,26 @@ services:
           description:
             en_us: "TLS certificate and key. Persisted so devices don't have to re-trust it on every restart."
 
+  # Hands-off updates. Uncomment to have new MSec images pulled automatically;
+  # the scope label keeps it to this container rather than everything on the box.
+  #
+  # Worth a thought first: this lets a container restart your password manager
+  # whenever a new image is published. That is convenient and it is also a
+  # supply-chain path into your own machine, so only enable it if you are happy
+  # trusting whatever the registry serves next.
+  #
+  # watchtower:
+  #   image: containrrr/watchtower
+  #   container_name: msec-watchtower
+  #   restart: unless-stopped
+  #   command: --label-enable --cleanup --interval 86400
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #
+  # ...and add this to the msec service above:
+  #   labels:
+  #     com.centurylinklabs.watchtower.enable: "true"
+
 x-casaos:
   architectures:
     - amd64
