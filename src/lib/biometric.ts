@@ -71,7 +71,15 @@ export function disableBiometric(): void {
 }
 
 /** Is a platform authenticator (fingerprint / face / Hello) present? */
-export type BiometricBlocker = 'ok' | 'insecure-context' | 'no-webauthn' | 'no-sensor' | 'unknown';
+export type BiometricBlocker =
+  | 'ok' | 'insecure-context' | 'ip-host' | 'no-webauthn' | 'no-sensor' | 'unknown';
+
+/** IPv4 literal, or an IPv6 literal in brackets as it appears in a hostname. */
+export function isIpHost(hostname: string): boolean {
+  if (!hostname) return false;
+  if (hostname.startsWith('[') && hostname.endsWith(']')) return true;
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname);
+}
 
 export interface BiometricCapability {
   available: boolean;
@@ -102,6 +110,24 @@ export async function biometricCapability(): Promise<BiometricCapability> {
         'Biometric unlock needs a secure connection. This page is served over ' +
         'plain HTTP, where browsers switch off WebAuthn entirely. Reach MSec over ' +
         'HTTPS (or via localhost) and it will become available.',
+    };
+  }
+
+  // WebAuthn forbids IP addresses as relying-party IDs outright: the RP ID has
+  // to be a domain. This is a spec rule, not a certificate problem, so no
+  // amount of certificate trust makes https://192.168.1.50 work. Browsers
+  // report it as "This is an invalid domain", which sends people hunting
+  // through their TLS setup for a fault that isn't there.
+  if (isIpHost(location.hostname)) {
+    return {
+      available: false,
+      reason: 'ip-host',
+      detail:
+        `Biometric unlock can't be used at an IP address (${location.hostname}). ` +
+        'WebAuthn requires a hostname — this is a rule in the standard, not a ' +
+        'certificate problem, so it cannot be worked around. Reach MSec by name ' +
+        'instead: a Tailscale hostname is the easiest route and gives you a ' +
+        'trusted certificate at the same time. Your master password is unaffected.',
     };
   }
 
@@ -143,6 +169,13 @@ export async function biometricAvailable(): Promise<boolean> {
  */
 export function explainWebAuthnFailure(err: any): string {
   const name = err?.name || '';
+
+  if (typeof location !== 'undefined' && isIpHost(location.hostname)) {
+    return `Biometric unlock can't be used at an IP address (${location.hostname}). ` +
+      'WebAuthn requires a hostname — no certificate change will fix it. Reach MSec ' +
+      'by name instead (Tailscale is the easiest route).';
+  }
+
   const selfHostedHttps =
     typeof location !== 'undefined' &&
     location.protocol === 'https:' &&

@@ -15,6 +15,7 @@ import {
 import { createBackup, restoreBackup, type VaultPayload as BackupPayload } from '../lib/backup';
 import { clearFailedUnlocks, recordFailedUnlock } from '../lib/lockout';
 import { mergeSync } from '../lib/syncmerge';
+import { isIpHost } from '../lib/biometric';
 import { APP_VERSION } from '../lib/updater';
 import {
   biometricCapability,
@@ -430,6 +431,13 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
 function friendlyAuthError(e: any): string {
   const code = e?.code || '';
   if (code === 'auth/unauthorized-domain') {
+    if (isIpHost(location.hostname)) {
+      return `Google sign-in can't be used at an IP address (${location.hostname}). ` +
+        'Firebase authorised domains only accept hostnames, so this cannot be added ' +
+        'to the list. Reach MSec by name instead — a Tailscale hostname works and ' +
+        'fixes biometric unlock at the same time. Your vault works fine without ' +
+        'signing in; sync is the only thing that needs it.';
+    }
     return `Firebase does not recognise this address (${location.hostname}). Add it under ` +
       'Firebase Console \u2192 Authentication \u2192 Settings \u2192 Authorized domains. Note that a bare ' +
       'IP address cannot be authorised \u2014 the app needs a hostname.';

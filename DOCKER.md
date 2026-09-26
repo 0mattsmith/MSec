@@ -80,9 +80,19 @@ Set `MSEC_TLS=off` on the container in this case, since Tailscale terminates TLS
 > Only use `MSEC_TLS=off` behind something that speaks HTTPS. On its own it puts
 > the app back outside a secure context, where it cannot function.
 
-This matters more than aesthetics for one feature: **biometric unlock**.
-WebAuthn is strict about certificate errors, and browsers may refuse to register
-a credential on a self-signed origin. Master password unlock works either way.
+This matters more than aesthetics, because **two features cannot work at an IP
+address at all**:
+
+- **Biometric unlock.** WebAuthn forbids IP addresses as relying-party IDs — the
+  RP ID must be a domain. Browsers report this as "This is an invalid domain",
+  which sends people hunting through their TLS configuration for a fault that
+  isn't there. No certificate change fixes it.
+- **Google sign-in.** Firebase authorised domains only accept hostnames, so an
+  IP simply cannot be added to the list.
+
+Reaching MSec by *name* fixes both, and a trusted certificate additionally keeps
+WebAuthn happy. Master password unlock, the vault itself, and manual transfer
+files all work regardless.
 
 ---
 

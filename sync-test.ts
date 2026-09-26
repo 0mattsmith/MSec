@@ -75,5 +75,14 @@ const folders = mergeSync(
 check(folders.merged.length === 2, 'local-only folders are kept');
 check(folders.toUpload.length === 1, 'and queued for upload');
 
+// --- Host classification: decides whether WebAuthn / Firebase auth can work ---
+import { isIpHost } from './src/lib/biometric';
+for (const h of ['192.168.1.50', '10.0.0.136', '127.0.0.1', '[fe80::1]']) {
+  check(isIpHost(h) === true, `IP host recognised: ${h}`);
+}
+for (const h of ['msec.local', 'localhost', 'msec.tail1234.ts.net', '0mattsmith.github.io', '']) {
+  check(isIpHost(h) === false, `hostname not mistaken for an IP: ${h || '(empty)'}`);
+}
+
 console.log(fail ? `\n${fail} FAILED` : '\nSync reconciliation verified.');
 process.exit(fail?1:0);
