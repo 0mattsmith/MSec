@@ -34,6 +34,34 @@ custom URI scheme.
 
 ---
 
+## Moving to a different Firebase project
+
+Copy the config from Firebase Console (Project settings → General → Your apps →
+Web app → Config), then:
+
+```powershell
+.\set-firebase-project.ps1
+```
+
+It reads the clipboard, so there's nothing to paste into the terminal. Any shape
+works — the JS object Firebase shows you, strict JSON, one line or many, with or
+without the surrounding `import`/`initializeApp` lines. If you'd rather not use
+the clipboard:
+
+```powershell
+.\set-firebase-project.ps1 -ConfigPath .\config.json
+.\set-firebase-project.ps1 -ProjectId msec-4f21c -ApiKey AIza... -AppId 1:48:web:9f
+```
+
+It writes `firebase-applet-config.json`, `extension/config.js` and `.firebaserc`
+together, so the app and the extension can't end up pointed at different
+projects.
+
+OAuth clients belong to a project and don't carry over, so recreate them in the
+new one and re-run `set-oauth-client.ps1`. Vault data isn't copied: UIDs differ
+between projects, and each device re-uploads its own local vault on first
+sign-in.
+
 ## One-time setup
 
 ### 1. Authorise the web origins
