@@ -14,6 +14,7 @@ import {
 } from '../lib/crypto';
 import { createBackup, restoreBackup, type VaultPayload as BackupPayload } from '../lib/backup';
 import { clearFailedUnlocks, recordFailedUnlock } from '../lib/lockout';
+import { mergeSync } from '../lib/syncmerge';
 import { APP_VERSION } from '../lib/updater';
 import {
   biometricCapability,
@@ -267,13 +268,30 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!currentUser || !state.isUnlocked || !keyRef.current) return;
 
+    mergedItems.current = false;
+    mergedFolders.current = false;
+
     const itemsRef = collection(db, `users/${currentUser.uid}/items`);
     const qItems = query(itemsRef, where('userId', '==', currentUser.uid));
     const unsubItems = onSnapshot(qItems, async (snapshot) => {
       const decrypted = await Promise.all(
         snapshot.docs.map((d) => decryptDoc<VaultItem>(d.id, d.data())),
       );
-      updateState({ items: decrypted.filter((it): it is VaultItem => it !== null) });
+      const remote = decrypted.filter((it): it is VaultItem => it !== null);
+
+      // First snapshot: reconcile instead of handing over. The remote is empty
+      // for any account new to this Firebase project, and replacing local items
+      // with nothing would then be persisted straight over the stored vault.
+      if (!mergedItems.current) {
+        mergedItems.current = true;
+        const { merged, toUpload } = mergeSync(stateRef.current.items, remote);
+        updateState({ items: merged });
+        for (const item of toUpload) {
+          putItemDoc(item).catch((e) => console.error('Failed to upload local item', item.title, e));
+        }
+        return;
+      }
+      updateState({ items: remote });
     }, (error) => handleFirestoreError(error, OperationType.GET, `users/${currentUser.uid}/items`));
 
     const foldersRef = collection(db, `users/${currentUser.uid}/folders`);
@@ -282,7 +300,20 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
       const decrypted = await Promise.all(
         snapshot.docs.map((d) => decryptDoc<VaultFolder>(d.id, d.data())),
       );
-      updateState({ folders: decrypted.filter((f): f is VaultFolder => f !== null) });
+      const remote = decrypted.filter((f): f is VaultFolder => f !== null);
+
+      if (!mergedFolders.current) {
+        mergedFolders.current = true;
+        // VaultFolder has no updatedAt, so recency can't break a tie: the remote
+        // copy wins on conflict and local-only folders are simply added.
+        const { merged, toUpload } = mergeSync(stateRef.current.folders, remote);
+        updateState({ folders: merged });
+        for (const folder of toUpload) {
+          putFolderDoc(folder).catch((e) => console.error('Failed to upload local folder', folder.name, e));
+        }
+        return;
+      }
+      updateState({ folders: remote });
     }, (error) => handleFirestoreError(error, OperationType.GET, `users/${currentUser.uid}/folders`));
 
     return () => {
@@ -330,6 +361,13 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
   // ---------- Local persistence (encrypted) ----------
 
   const persistSeq = useRef(0);
+  // Snapshot callbacks fire long after the render that created them, so
+  // they must not close over `state` directly.
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  // The first snapshot of a session merges; later ones are authoritative.
+  const mergedItems = useRef(false);
+  const mergedFolders = useRef(false);
   useEffect(() => {
     // Non-sensitive prefs: plaintext is fine.
     localStorage.setItem(LS_PREFS, JSON.stringify({

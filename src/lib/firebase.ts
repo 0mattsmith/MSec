@@ -4,7 +4,16 @@ import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json'; // using the relative path from src/lib/firebase.ts
 
 export const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId); /* CRITICAL */
+/*
+ * The old AI Studio project used a named Firestore database, hence the explicit
+ * id. A normally-created project uses the default one, where the canonical call
+ * is getFirestore(app) with no id at all - so treat "(default)" or an empty
+ * value as "use the default" rather than passing the literal string through.
+ */
+const databaseId = (firebaseConfig as any).firestoreDatabaseId;
+export const db = databaseId && databaseId !== '(default)'
+  ? getFirestore(app, databaseId)
+  : getFirestore(app);
 export const auth = getAuth(app);
 
 // Helper for error handling
