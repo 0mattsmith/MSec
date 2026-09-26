@@ -6,7 +6,7 @@ import {
   updateActionLabel, type UpdateInfo, type UpdateProgress,
 } from '../lib/updater';
 import { downloadFile, backupFilename, inspectBackup } from '../lib/backup';
-import { parseImport, type ParsedImport } from '../lib/importers';
+import { parseImport, SUPPORTED_SOURCES, type ParsedImport } from '../lib/importers';
 import { analyseImport, type ImportAnalysis } from '../lib/dedupe';
 import { ImportReview } from './ImportReview';
 import { QrImport } from './QrImport';
@@ -387,9 +387,14 @@ export function SettingsView() {
               <Upload className="h-5 w-5 mr-2 text-indigo-500" /> Import from another app
             </h3>
             <p className="text-sm text-gray-500 dark:text-slate-400">
-              Import an export file from Bitwarden, LastPass, 1Password, KeePass, Chrome/Edge,
-              or MSec. JSON and CSV are both understood, and the format is detected for you.
-              Everything is read on this device.
+              CSV and JSON are both understood and the format is detected for you — including
+              which columns mean what, so cards and notes arrive as cards and notes rather than
+              as logins. Everything is read on this device.
+            </p>
+            <p className="text-xs text-gray-500 dark:text-slate-400">
+              <span className="font-semibold text-gray-600 dark:text-slate-300">Known formats: </span>
+              {SUPPORTED_SOURCES.join(' · ')} · MSec. Anything else with a header row is matched
+              by column name.
             </p>
 
             <div className="flex flex-wrap gap-3">
@@ -397,7 +402,10 @@ export function SettingsView() {
                 <FileUp className="mr-2 h-4 w-4" /> Choose file
                 <input
                   type="file"
-                  accept=".json,.csv,.txt,application/json,text/csv"
+                  // .1pux / .kdbx / .zip are accepted deliberately even though they
+                  // can't be read: the parser recognises them and explains what to
+                  // export instead, which beats the picker refusing to show them.
+                  accept=".json,.csv,.tsv,.txt,.1pux,.kdbx,.zip,application/json,text/csv"
                   className="hidden"
                   onChange={(e) => handleImportFile(e.target.files?.[0])}
                 />

@@ -29,7 +29,14 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      # packages: '' is deliberate. The action's default is "tools platform-tools",
+      # and Google has withdrawn the obsolete "tools" package from the SDK
+      # repository, so sdkmanager exits 1 with "Failed to find package 'tools'".
+      # platform-tools is preinstalled on the runner and the NDK is installed
+      # explicitly below, so there is nothing for the action to fetch.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: ''
 
       - name: Install NDK
         run: sdkmanager "ndk;26.1.10909125"
