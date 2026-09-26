@@ -2,11 +2,12 @@
   "_comment": "Google OAuth clients for the native builds. Client IDs are public by design and belong in version control. The desktop client SECRET does not live here - it is read from VITE_GOOGLE_DESKTOP_CLIENT_SECRET at build time (.env.local locally, a repo secret in CI), because this repository is public and GitHub blocks pushes containing one. RFC 8252 section 8.5 notes an installed app's secret cannot be kept confidential anyway - PKCE is what protects the exchange - but publishing it invites someone to impersonate MSec on a consent screen, which is worth avoiding for free.",
   "desktop": {
     "_type": "Google Cloud Console -> Credentials -> OAuth client ID -> Desktop app",
-    "clientId": "PASTE_DESKTOP_CLIENT_ID.apps.googleusercontent.com",
+    "clientId": "996984973475-elk4shrbcnp17m5d50gvi8g1jm4serkp.apps.googleusercontent.com",
     "_secret": "set VITE_GOOGLE_DESKTOP_CLIENT_SECRET - see SYNC.md"
   },
   "android": {
     "_type": "Google Cloud Console -> Credentials -> OAuth client ID -> Android. Package name com.msec.vault, plus the SHA-1 fingerprint of the keystore you made with new-keystore.ps1. Android clients have no secret.",
-    "clientId": "PASTE_ANDROID_CLIENT_ID.apps.googleusercontent.com"
+    "clientId": "996984973475-dk6h6vhubmhf2paqp0hfg7805gpinkbq.apps.googleusercontent.com"
   }
 }
+
