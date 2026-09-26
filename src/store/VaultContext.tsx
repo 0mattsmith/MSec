@@ -2,7 +2,8 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import type { AppState, VaultItem, VaultFolder, MaskedEmail, Workspace } from '../types';
 import { db, auth, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, doc, getDoc, setDoc, deleteDoc, onSnapshot, query, where } from 'firebase/firestore';
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
+import { onAuthStateChanged, signInWithPopup, signInWithCredential, GoogleAuthProvider, signOut } from 'firebase/auth';
+import { detectPlatform } from '../lib/updater';
 import {
   createKdfConfig,
   unlockVaultKey,
@@ -15,7 +16,7 @@ import { createBackup, restoreBackup, type VaultPayload as BackupPayload } from 
 import { clearFailedUnlocks, recordFailedUnlock } from '../lib/lockout';
 import { APP_VERSION } from '../lib/updater';
 import {
-  biometricAvailable,
+  biometricCapability,
   biometricEnrolled,
   disableBiometric,
   enrolBiometric,
@@ -129,6 +130,7 @@ interface VaultContextType extends AppState {
   exportTransfer: () => string;
   biometricReady: boolean;
   biometricSupported: boolean;
+  biometricReason: string;
   lock: () => void;
   setMasterPassword: (password: string) => Promise<void>;
   setTheme: (theme: 'dark' | 'light') => void;
@@ -154,7 +156,8 @@ interface VaultContextType extends AppState {
   /** True when this device has no local vault but the signed-in account has one in the cloud. */
   remoteVaultAvailable: boolean;
   currentUser: any;
-  signInWithGoogle: () => Promise<void>;
+  /** Resolves to an error message, or null when sign-in succeeded. */
+  signInWithGoogle: () => Promise<string | null>;
   signOutUser: () => Promise<void>;
 }
 
@@ -176,9 +179,14 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
   const [remoteKdf, setRemoteKdf] = useState<KdfConfig | null>(null);
   const [biometricReady, setBiometricReady] = useState(biometricEnrolled());
   const [biometricSupported, setBiometricSupported] = useState(false);
+  // Why it's unavailable, so Settings can explain rather than guess.
+  const [biometricReason, setBiometricReason] = useState('');
 
   useEffect(() => {
-    biometricAvailable().then(setBiometricSupported);
+    biometricCapability().then((cap) => {
+      setBiometricSupported(cap.available);
+      setBiometricReason(cap.detail);
+    });
   }, []);
 
   // Auto-lock after inactivity. The key is purged, so returning requires the
@@ -377,14 +385,58 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+/*
+ * Firebase's raw codes are opaque to anyone who hasn't read its source. These
+ * three are the ones a self-hosting user will actually hit.
+ */
+function friendlyAuthError(e: any): string {
+  const code = e?.code || '';
+  if (code === 'auth/unauthorized-domain') {
+    return `Firebase does not recognise this address (${location.hostname}). Add it under ` +
+      'Firebase Console \u2192 Authentication \u2192 Settings \u2192 Authorized domains. Note that a bare ' +
+      'IP address cannot be authorised \u2014 the app needs a hostname.';
+  }
+  if (code === 'auth/popup-blocked') return 'Your browser blocked the sign-in window. Allow pop-ups for this site and try again.';
+  if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return 'Sign-in was cancelled.';
+  if (code === 'auth/network-request-failed') return 'Could not reach Google. Check this device\u2019s connection.';
+  if (code === 'auth/invalid-credential') {
+    return 'Google accepted the sign-in but Firebase rejected the token. The OAuth client ID ' +
+      'probably needs whitelisting under Authentication \u2192 Sign-in method \u2192 Google.';
+  }
+  return e?.message ? String(e.message) : 'Sign-in failed.';
+}
+
   // ---------- Auth ----------
 
-  const signInWithGoogle = async () => {
-    const provider = new GoogleAuthProvider();
+  /*
+   * Web uses Firebase's popup. The native builds cannot: a Tauri webview has no
+   * opener channel back from the popup, and Google refuses OAuth inside Android
+   * WebViews by policy. Those go out to the system browser instead - see
+   * src/lib/oauth.ts.
+   *
+   * Returns the problem rather than swallowing it. The old version caught and
+   * only console.error'd, which made a failed sign-in look like a dead button.
+   */
+  const signInWithGoogle = async (): Promise<string | null> => {
+    const platform = detectPlatform();
+
+    if (platform === 'desktop-app' || platform === 'android') {
+      const { nativeGoogleSignIn } = await import('../lib/oauth');
+      const result = await nativeGoogleSignIn(platform);
+      if (!result.ok || !result.idToken) return result.error || 'Sign-in failed.';
+      try {
+        await signInWithCredential(auth, GoogleAuthProvider.credential(result.idToken));
+        return null;
+      } catch (e: any) {
+        return friendlyAuthError(e);
+      }
+    }
+
     try {
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error(error);
+      await signInWithPopup(auth, new GoogleAuthProvider());
+      return null;
+    } catch (e: any) {
+      return friendlyAuthError(e);
     }
   };
 
@@ -760,6 +812,7 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
         exportTransfer,
         biometricReady,
         biometricSupported,
+        biometricReason,
       }}
     >
       {children}

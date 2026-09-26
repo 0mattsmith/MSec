@@ -25,3 +25,7 @@ keystore.properties
 updater-private-key.txt
 *.key
 *.key.pub
+
+# Chromium extension packing key - never commit
+extension-signing-key.pem
+*.pem

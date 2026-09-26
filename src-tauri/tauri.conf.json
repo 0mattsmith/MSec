@@ -44,7 +44,16 @@
       "windows": {
         "installMode": "passive"
       }
+    },
+    "deep-link": {
+      "mobile": [
+        {
+          "scheme": [
+            "com.googleusercontent.apps.unconfigured"
+          ],
+          "appLink": false
+        }
+      ]
     }
   }
 }
-

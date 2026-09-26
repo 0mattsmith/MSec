@@ -14,7 +14,7 @@ import type { ImportedTotp } from '../lib/otpimport';
 
 export function SettingsView() {
   const { items, folders, updateItem, deleteItemPermanently, clearStorage, addFolder, addItem, addItems, settings, updateSettings, currentUser, signInWithGoogle, signOutUser,
-    biometricReady, biometricSupported, enableBiometric, turnOffBiometric,
+    biometricReady, biometricSupported, biometricReason, enableBiometric, turnOffBiometric,
     exportBackup, importBackup, exportTransfer } = useVault();
 
   // --- Encrypted backup ---
@@ -64,6 +64,8 @@ export function SettingsView() {
   const [bioPassword, setBioPassword] = useState('');
   const [bioPrompt, setBioPrompt] = useState(false);
   const [bioError, setBioError] = useState('');
+  const [signInError, setSignInError] = useState('');
+  const [signingIn, setSigningIn] = useState(false);
   const [bioBusy, setBioBusy] = useState(false);
 
   const handleEnableBiometric = async () => {
@@ -228,7 +230,8 @@ export function SettingsView() {
 
             {!biometricSupported ? (
               <p className="text-sm text-gray-500 dark:text-slate-400">
-                No fingerprint, face or Windows Hello sensor was detected on this device.
+                {biometricReason ||
+                  'No fingerprint, face or Windows Hello sensor was detected on this device.'}
               </p>
             ) : biometricReady ? (
               <>
@@ -587,13 +590,26 @@ export function SettingsView() {
               }
             </p>
 
+            {signInError && (
+              <p className="rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+                {signInError}
+              </p>
+            )}
+
             <div className="flex justify-start space-x-3">
               {!currentUser ? (
-                <button 
-                  onClick={signInWithGoogle}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md text-xs font-bold uppercase transition-colors"
+                <button
+                  onClick={async () => {
+                    setSigningIn(true);
+                    setSignInError('');
+                    const problem = await signInWithGoogle();
+                    setSigningIn(false);
+                    if (problem) setSignInError(problem);
+                  }}
+                  disabled={signingIn}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white rounded-md text-xs font-bold uppercase transition-colors"
                 >
-                  Sign in with Google
+                  {signingIn ? 'Waiting for your browser…' : 'Sign in with Google'}
                 </button>
               ) : (
                 <button 

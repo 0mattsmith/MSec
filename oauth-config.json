@@ -1,0 +1,12 @@
+{
+  "_comment": "Google OAuth clients for the native builds. The web build does not use this file - it signs in through Firebase's popup. See SYNC.md for how to create these. Neither value here is confidential: RFC 8252 section 8.5 is explicit that an installed app's client secret cannot be kept secret, which is why PKCE protects the exchange instead.",
+  "desktop": {
+    "_type": "Google Cloud Console -> Credentials -> OAuth client ID -> Desktop app",
+    "clientId": "PASTE_DESKTOP_CLIENT_ID.apps.googleusercontent.com",
+    "clientSecret": "PASTE_DESKTOP_CLIENT_SECRET"
+  },
+  "android": {
+    "_type": "Google Cloud Console -> Credentials -> OAuth client ID -> Android. Package name com.msec.vault, plus the SHA-1 fingerprint of the keystore you made with new-keystore.ps1. Android clients have no secret.",
+    "clientId": "PASTE_ANDROID_CLIENT_ID.apps.googleusercontent.com"
+  }
+}

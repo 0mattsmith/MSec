@@ -15,6 +15,9 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-upload = "2"
+# Catches the Google OAuth redirect on Android (custom URI scheme). Supported
+# on desktop too, so no target gating is needed.
+tauri-plugin-deep-link = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

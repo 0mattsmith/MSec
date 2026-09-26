@@ -1,5 +1,6 @@
 {
   "manifest_version": 3,
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAw4Pw6DJHLXLfK2wxRNLsFG3ZjMItZX7I4mD2MyQQi5c7tzxWDudHGAOY9G4vwKO5iQLjYT5yjpDrIZ2OW5zHWXpNy/sGDCqUf1h9mhowffFoaLZR20/U6/ivYNPXmOENQl2Zi9LjZG4ATa7f7j1cGImOIJYaMhEUnXMssRQchBwhCOHTnPHKQKd8hNzBmU3kzy/9r9eJH0eXOSypatDGQlWiddHNd+ntQ3dbHsICEsdHWsxNIPBpKbSd0ZIHyDaoNJJvYK9thx997m6aMILg6QQoeOa2Uz3sW4zYSH9J0RDI3NS57l9lXSB+VYSjHl4DqEYH//ubJ7a6hw9njkId2wIDAQAB",
   "name": "MSec Password Manager",
   "version": "0.1.0",
   "description": "Autofill and save logins with MSec - your zero-knowledge password manager.",
@@ -18,17 +19,30 @@
   },
   "background": {
     "service_worker": "background.js",
-    "scripts": ["background.js"]
+    "scripts": [
+      "background.js"
+    ]
   },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["content.js"],
-      "css": ["content.css"],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
       "run_at": "document_idle"
     }
   ],
-  "permissions": ["storage", "alarms", "identity"],
+  "permissions": [
+    "storage",
+    "alarms",
+    "identity"
+  ],
   "host_permissions": [
     "https://identitytoolkit.googleapis.com/*",
     "https://securetoken.googleapis.com/*",
@@ -36,8 +50,13 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["icons/icon-32.png"],
-      "matches": ["http://*/*", "https://*/*"]
+      "resources": [
+        "icons/icon-32.png"
+      ],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ]
     }
   ],
   "browser_specific_settings": {

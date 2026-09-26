@@ -71,13 +71,101 @@ export function disableBiometric(): void {
 }
 
 /** Is a platform authenticator (fingerprint / face / Hello) present? */
-export async function biometricAvailable(): Promise<boolean> {
-  if (!window.PublicKeyCredential?.isUserVerifyingPlatformAuthenticatorAvailable) return false;
-  try {
-    return await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-  } catch {
-    return false;
+export type BiometricBlocker = 'ok' | 'insecure-context' | 'no-webauthn' | 'no-sensor' | 'unknown';
+
+export interface BiometricCapability {
+  available: boolean;
+  reason: BiometricBlocker;
+  /** A sentence fit to show the user, explaining what to do about it. */
+  detail: string;
+}
+
+/**
+ * Work out whether biometric unlock can be offered, and if not, why.
+ *
+ * Self-hosting makes this worth spelling out. WebAuthn needs a secure context,
+ * so over plain http:// on a LAN address it is simply absent. Note that a
+ * *self-signed* origin cannot be detected here: the browser still reports
+ * isSecureContext === true once the certificate has been accepted, and only
+ * refuses at create() time. That case is handled in explainWebAuthnFailure.
+ */
+export async function biometricCapability(): Promise<BiometricCapability> {
+  if (typeof window === 'undefined') {
+    return { available: false, reason: 'unknown', detail: '' };
   }
+
+  if (!window.isSecureContext) {
+    return {
+      available: false,
+      reason: 'insecure-context',
+      detail:
+        'Biometric unlock needs a secure connection. This page is served over ' +
+        'plain HTTP, where browsers switch off WebAuthn entirely. Reach MSec over ' +
+        'HTTPS (or via localhost) and it will become available.',
+    };
+  }
+
+  if (!window.PublicKeyCredential?.isUserVerifyingPlatformAuthenticatorAvailable) {
+    return {
+      available: false,
+      reason: 'no-webauthn',
+      detail: 'This browser does not support WebAuthn, which biometric unlock is built on.',
+    };
+  }
+
+  try {
+    const present = await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+    return present
+      ? { available: true, reason: 'ok', detail: '' }
+      : {
+        available: false,
+        reason: 'no-sensor',
+        detail: 'No fingerprint, face or Windows Hello sensor was detected on this device.',
+      };
+  } catch {
+    return { available: false, reason: 'unknown', detail: 'Biometric support could not be determined on this device.' };
+  }
+}
+
+/** Kept for callers that only need the boolean. */
+export async function biometricAvailable(): Promise<boolean> {
+  return (await biometricCapability()).available;
+}
+
+/**
+ * Turn a WebAuthn failure into something actionable.
+ *
+ * Browsers refuse WebAuthn on an origin whose certificate doesn't validate, but
+ * report it as a generic security or not-allowed error rather than saying so.
+ * On a self-hosted MSec that is far and away the likeliest cause, so it gets
+ * mentioned as a possibility - never asserted, since we cannot see the
+ * certificate from here.
+ */
+export function explainWebAuthnFailure(err: any): string {
+  const name = err?.name || '';
+  const selfHostedHttps =
+    typeof location !== 'undefined' &&
+    location.protocol === 'https:' &&
+    !['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+
+  if (name === 'NotAllowedError') {
+    return selfHostedHttps
+      ? 'The biometric prompt was dismissed or refused. If you are self-hosting with a ' +
+        'self-signed certificate, that is the usual cause: browsers block WebAuthn on ' +
+        'origins whose certificate they do not trust. A trusted certificate (for example ' +
+        'via Tailscale or a reverse proxy) resolves it.'
+      : 'The biometric prompt was dismissed. Try again and approve it.';
+  }
+  if (name === 'SecurityError') {
+    return selfHostedHttps
+      ? `This origin (${location.hostname}) was rejected for WebAuthn. With a self-signed ` +
+        'certificate that is expected - browsers require a certificate they trust before ' +
+        'they will register a credential.'
+      : 'This page is not allowed to register a security key.';
+  }
+  if (name === 'InvalidStateError') return 'A credential is already registered for this device.';
+  if (name === 'NotSupportedError') return 'This device does not support the options MSec needs for biometric unlock.';
+  return err?.message ? String(err.message) : 'Biometric enrolment failed.';
 }
 
 /** Turn a PRF output into an AES-GCM wrapping key. */
@@ -168,8 +256,7 @@ export async function enrolBiometric(rawVaultKey: Uint8Array, accountLabel: stri
     localStorage.setItem(LS_BIO, JSON.stringify(record));
     return { ok: true };
   } catch (e: any) {
-    if (e?.name === 'NotAllowedError') return { ok: false, error: 'Enrolment was cancelled or timed out.' };
-    return { ok: false, error: e?.message || 'Biometric enrolment failed.' };
+    return { ok: false, error: explainWebAuthnFailure(e) };
   }
 }
 
@@ -215,7 +302,6 @@ export async function unlockWithBiometric(config: KdfConfig): Promise<BiometricR
     }
     return { ok: true, key };
   } catch (e: any) {
-    if (e?.name === 'NotAllowedError') return { ok: false, error: 'Biometric check was cancelled or timed out.' };
-    return { ok: false, error: e?.message || 'Biometric unlock failed.' };
+    return { ok: false, error: explainWebAuthnFailure(e) };
   }
 }

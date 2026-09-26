@@ -24,6 +24,18 @@ export function LockScreen() {
   const [busy, setBusy] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
   const [cooldownMs, setCooldownMs] = useState(lockoutRemainingMs());
+  const [signInError, setSignInError] = useState('');
+  const [signingIn, setSigningIn] = useState(false);
+
+  // The native builds leave for the system browser, which can take a while;
+  // without this the button looks inert for the whole round trip.
+  const handleSignIn = async () => {
+    setSigningIn(true);
+    setSignInError('');
+    const problem = await signInWithGoogle();
+    setSigningIn(false);
+    if (problem) setSignInError(problem);
+  };
 
   // Tick the cooldown down so the user can see when they may try again.
   useEffect(() => {
@@ -194,12 +206,18 @@ export function LockScreen() {
             </p>
             <button
               type="button"
-              onClick={() => signInWithGoogle()}
-              className="flex items-center space-x-2 rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800/50"
+              onClick={handleSignIn}
+              disabled={signingIn}
+              className="flex items-center space-x-2 rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800/50"
             >
               <Cloud className="h-4 w-4 opacity-70" />
-              <span>Sign in to restore your vault</span>
+              <span>{signingIn ? 'Waiting for your browser…' : 'Sign in to restore your vault'}</span>
             </button>
+            {signInError && (
+              <p className="max-w-sm rounded-lg bg-amber-50 p-2 text-center text-[11px] leading-relaxed text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+                {signInError}
+              </p>
+            )}
           </div>
         )}
 
