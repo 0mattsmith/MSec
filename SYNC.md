@@ -17,6 +17,29 @@ If you'd rather not involve Google at all, skip to
 
 ---
 
+## Email and password
+
+Firebase → Authentication → Sign-in method → **Email/Password**, then sign in
+from the lock screen or Settings with "Use an email address instead".
+
+This is the simplest option and, unless you specifically want a Google account,
+the better one. It authenticates with a direct API call, so it needs no OAuth
+client, no popup, no deep link, and — unlike Google sign-in — it is not gated on
+the authorised-domain list. It is the only method that works identically on the
+web, on desktop, on Android and on a self-hosted instance reached at an IP.
+
+**The account password must not be your master password.** Signing in sends the
+password to Google. That is unremarkable for an account password and fatal for
+the master password: Google would hold the key to the vault it is storing for
+you. MSec checks any password you enter against the vault's own verifier and
+refuses it if it matches, so this isn't left to memory — but it's worth knowing
+why. Use a generated password; you never have to type it from memory anyway.
+
+One consequence of enabling this provider: anyone who finds your Firebase
+project can create an account in it. The Firestore rules isolate every user by
+uid, so they cannot touch your vault — but they do consume your quota. Worth
+turning the provider off again if you ever stop using it.
+
 ## Why the native apps need their own OAuth clients
 
 The web build signs in with Firebase's `signInWithPopup`, which is fine in a

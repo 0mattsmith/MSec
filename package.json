@@ -15,7 +15,7 @@
     "test:detect": "node extension/detect-test.cjs",
     "test:biometric": "tsx test-biometric.ts",
     "test:updater": "tsx test-updater.ts",
-    "test": "npm run lint && npm run test:crypto && npm run test:restore && npm run test:biometric && npm run test:backup && npm run test:lockout && npm run test:updater && npm run test:import && npm run test:otp && npm run test:qr && npm run test:dedupe && npm run test:transfer && npm run test:batch && npm run test:sync && npm run test:oauth && npm run test:detect",
+    "test": "npm run lint && npm run test:crypto && npm run test:restore && npm run test:biometric && npm run test:backup && npm run test:lockout && npm run test:updater && npm run test:import && npm run test:otp && npm run test:qr && npm run test:dedupe && npm run test:transfer && npm run test:batch && npm run test:sync && npm run test:emailauth && npm run test:oauth && npm run test:detect",
     "test:backup": "tsx test-backup.ts",
     "test:lockout": "tsx test-lockout.ts",
     "test:import": "tsx import-test.ts",
@@ -25,7 +25,8 @@
     "test:transfer": "tsx transfer-test.ts",
     "test:batch": "tsx batchadd-test.ts",
     "test:oauth": "tsx oauth-test.ts",
-    "test:sync": "tsx sync-test.ts"
+    "test:sync": "tsx sync-test.ts",
+    "test:emailauth": "tsx emailauth-test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -68,4 +69,3 @@
     "vite": "^6.2.3"
   }
 }
-

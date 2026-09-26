@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useVault } from '../store/VaultContext';
+import { EmailSignIn } from './EmailSignIn';
 import { Lock, Fingerprint, Key, Eye, EyeOff, Cloud, ShieldAlert, Check } from 'lucide-react';
 import { checkPasswordStrength } from '../lib/utils';
 import { UpdateBanner } from './UpdateBanner';
@@ -218,6 +219,7 @@ export function LockScreen() {
                 {signInError}
               </p>
             )}
+            <EmailSignIn compact />
           </div>
         )}
 

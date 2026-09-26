@@ -10,6 +10,7 @@ import {
 import { downloadFile, backupFilename, inspectBackup } from '../lib/backup';
 import { parseImport, SUPPORTED_SOURCES, type ParsedImport } from '../lib/importers';
 import { analyseImport, type ImportAnalysis } from '../lib/dedupe';
+import { EmailSignIn } from './EmailSignIn';
 import { ImportReview } from './ImportReview';
 import { QrImport } from './QrImport';
 import type { ImportedTotp } from '../lib/otpimport';
@@ -625,6 +626,12 @@ export function SettingsView() {
               <p className="rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
                 {signInError}
               </p>
+            )}
+
+            {!currentUser && (
+              <div className="rounded-lg border border-gray-200 p-3 dark:border-slate-800">
+                <EmailSignIn />
+              </div>
             )}
 
             <div className="flex justify-start space-x-3">

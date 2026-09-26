@@ -15,6 +15,9 @@ import {
 import { createBackup, restoreBackup, type VaultPayload as BackupPayload } from '../lib/backup';
 import { clearFailedUnlocks, recordFailedUnlock } from '../lib/lockout';
 import { mergeSync } from '../lib/syncmerge';
+import {
+  signInWithEmail, signUpWithEmail, resetEmailPassword, type EmailAuthResult,
+} from '../lib/emailauth';
 import { isIpHost } from '../lib/biometric';
 import { APP_VERSION } from '../lib/updater';
 import {
@@ -160,6 +163,9 @@ interface VaultContextType extends AppState {
   currentUser: any;
   /** Resolves to an error message, or null when sign-in succeeded. */
   signInWithGoogle: () => Promise<string | null>;
+  signInWithEmailPassword: (email: string, password: string) => Promise<EmailAuthResult>;
+  signUpWithEmailPassword: (email: string, password: string) => Promise<EmailAuthResult>;
+  sendPasswordReset: (email: string) => Promise<EmailAuthResult>;
   signOutUser: () => Promise<void>;
 }
 
@@ -486,6 +492,20 @@ function friendlyAuthError(e: any): string {
     }
   };
 
+  /*
+   * The KDF config is passed through so the account password can be tried
+   * against the vault verifier: if it unlocks the vault it IS the master
+   * password, and sending it to Google would end the zero-knowledge property.
+   * See src/lib/emailauth.ts.
+   */
+  const signInWithEmailPassword = (email: string, password: string) =>
+    signInWithEmail(email, password, readKdfConfig());
+
+  const signUpWithEmailPassword = (email: string, password: string) =>
+    signUpWithEmail(email, password, readKdfConfig());
+
+  const sendPasswordReset = (email: string) => resetEmailPassword(email);
+
   const signOutUser = async () => {
     await signOut(auth);
     keyRef.current = null; // hard lock: purge key from memory
@@ -683,6 +703,9 @@ function friendlyAuthError(e: any): string {
         ...state,
         currentUser,
         signInWithGoogle,
+        signInWithEmailPassword,
+        signUpWithEmailPassword,
+        sendPasswordReset,
         signOutUser,
         unlock,
         unlockWithBiometric,
