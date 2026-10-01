@@ -197,3 +197,104 @@ export function analyseImport<T extends Partial<VaultItem> & { externalId?: stri
 
   return { entries, newCount, duplicateCount, similarCount };
 }
+
+// ---------- Scanning the vault against itself ----------
+
+export interface DuplicateGroup {
+  /** Why these were grouped, in words. */
+  reason: string;
+  items: VaultItem[];
+  /** True when every compared field matches across the whole group. */
+  identical: boolean;
+  /** Fields that vary within the group, when it isn't identical. */
+  differences: string[];
+}
+
+const REASON_LABELS: Record<string, string> = {
+  ext: 'imported from the same entry',
+  totp: 'same 2FA secret',
+  login: 'same website and username',
+  card: 'same card number',
+  note: 'same note title',
+};
+
+/**
+ * Find entries already in the vault that look like copies of each other.
+ *
+ * Grouping is transitive: A and B matching on a 2FA secret while B and C match
+ * on website + username puts all three together. Three entries for one account
+ * are one problem to resolve, and presenting them as two overlapping pairs
+ * makes the user do the joining up by hand.
+ *
+ * Identical and merely-similar groups are both returned, flagged differently,
+ * because two near-identical entries for one site are usually two real accounts
+ * — deciding that is the user's job, not ours.
+ */
+export function findDuplicateGroups(items: VaultItem[]): DuplicateGroup[] {
+  const live = items.filter((i) => i && !i.deletedAt);
+
+  // Union-find over items connected by any shared fingerprint.
+  const parent = new Map<string, string>();
+  const find = (id: string): string => {
+    let root = id;
+    while (parent.get(root) !== root) root = parent.get(root)!;
+    return root;
+  };
+  const union = (a: string, b: string) => {
+    const ra = find(a); const rb = find(b);
+    if (ra !== rb) parent.set(ra, rb);
+  };
+
+  for (const item of live) parent.set(item.id, item.id);
+
+  // "uuid:<id>" is every item's own identity and can never collide, so it is
+  // skipped — including it would be harmless but says nothing.
+  const seen = new Map<string, { id: string; prefix: string }>();
+  for (const item of live) {
+    for (const key of fingerprints(item)) {
+      if (key.startsWith('uuid:')) continue;
+      const prefix = key.split(':')[0];
+      const prior = seen.get(key);
+      if (prior) union(prior.id, item.id);
+      else seen.set(key, { id: item.id, prefix });
+    }
+  }
+
+  // Which fingerprint kind caused each component to form, for the explanation.
+  const reasonFor = new Map<string, string>();
+  for (const [key, { id, prefix }] of seen) {
+    const root = find(id);
+    if (!reasonFor.has(root) && [...seen.entries()].some(([k, v]) => k === key && find(v.id) === root)) {
+      if (REASON_LABELS[prefix]) reasonFor.set(root, REASON_LABELS[prefix]);
+    }
+  }
+
+  const byRoot = new Map<string, VaultItem[]>();
+  for (const item of live) {
+    const root = find(item.id);
+    byRoot.set(root, [...(byRoot.get(root) || []), item]);
+  }
+
+  const groups: DuplicateGroup[] = [];
+  for (const [root, members] of byRoot) {
+    if (members.length < 2) continue;
+
+    // Compare every member against the first; anything that varies anywhere
+    // makes the group "similar" rather than "identical".
+    const differences = new Set<string>();
+    for (let i = 1; i < members.length; i++) {
+      for (const d of listDifferences(members[i], members[0])) differences.add(d);
+    }
+
+    groups.push({
+      reason: reasonFor.get(root) || 'look like the same entry',
+      items: members.slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)),
+      identical: differences.size === 0,
+      differences: [...differences],
+    });
+  }
+
+  // Exact copies first — those are the ones safe to clear out without thought.
+  return groups.sort((a, b) =>
+    (a.identical === b.identical ? b.items.length - a.items.length : a.identical ? -1 : 1));
+}

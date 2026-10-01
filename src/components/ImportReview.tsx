@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Check, AlertTriangle, Copy, Plus, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Check, AlertTriangle, Copy, Plus, X, Loader2 } from 'lucide-react';
 import type { ClassifiedItem, ImportAnalysis } from '../lib/dedupe';
 
 /*
@@ -40,6 +40,8 @@ export function ImportReview<T extends { title?: string; username?: string; url?
   { analysis, sourceLabel, onConfirm, onCancel }: Props<T>,
 ) {
   const [entries, setEntries] = useState<ClassifiedItem<T>[]>(analysis.entries);
+  const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [filter, setFilter] = useState<'all' | 'new' | 'duplicate' | 'similar'>(
     analysis.duplicateCount + analysis.similarCount > 0 ? 'all' : 'new',
   );
@@ -57,6 +59,10 @@ export function ImportReview<T extends { title?: string; username?: string; url?
     .filter(({ entry }) => filter === 'all' || entry.kind === filter);
 
   const selectedCount = entries.filter((e) => e.selected).length;
+  const flaggedSelected = entries.filter((e) => e.selected && e.kind !== 'new').length;
+
+  // Changing the selection invalidates whatever was being confirmed.
+  useEffect(() => { setConfirming(false); }, [selectedCount, flaggedSelected]);
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm safe-all">
@@ -154,14 +160,46 @@ export function ImportReview<T extends { title?: string; username?: string; url?
           })}
         </ul>
 
+        {/*
+          Asking again, but only when it is worth asking. A confirmation on
+          every import is one more thing to click through without reading; a
+          confirmation that appears specifically because you are about to add
+          something that already exists still carries information.
+        */}
+        {confirming && (
+          <div className="border-t border-amber-200 bg-amber-50 p-4 dark:border-amber-500/30 dark:bg-amber-500/10">
+            <p className="flex items-start text-xs leading-relaxed text-amber-900 dark:text-amber-200">
+              <AlertTriangle className="mr-2 mt-px h-4 w-4 flex-shrink-0" />
+              <span>
+                {flaggedSelected} of the {selectedCount} selected{' '}
+                {flaggedSelected === 1 ? 'entry already looks like something' : 'entries already look like things'}{' '}
+                in your vault. Importing anyway will create{' '}
+                {flaggedSelected === 1 ? 'a second copy' : 'second copies'}. Continue?
+              </span>
+            </p>
+          </div>
+        )}
+
         <div className="flex gap-2 border-t border-gray-100 p-4 dark:border-slate-800">
           <button
-            onClick={() => onConfirm(entries.filter((e) => e.selected).map((e) => e.item))}
-            disabled={selectedCount === 0}
+            onClick={() => {
+              if (busy) return;
+              if (flaggedSelected > 0 && !confirming) { setConfirming(true); return; }
+              // Latched before the await: without this a second tap lands while
+              // the first write is still in flight and imports everything twice.
+              setBusy(true);
+              onConfirm(entries.filter((e) => e.selected).map((e) => e.item));
+            }}
+            disabled={selectedCount === 0 || busy}
             className="flex flex-1 items-center justify-center rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-500 disabled:opacity-50"
           >
-            <Check className="mr-2 h-4 w-4" />
-            Import {selectedCount} item{selectedCount === 1 ? '' : 's'}
+            {busy ? (
+              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Importing…</>
+            ) : confirming ? (
+              <><Check className="mr-2 h-4 w-4" />Yes, import {selectedCount} anyway</>
+            ) : (
+              <><Check className="mr-2 h-4 w-4" />Import {selectedCount} item{selectedCount === 1 ? '' : 's'}</>
+            )}
           </button>
           <button
             onClick={onCancel}

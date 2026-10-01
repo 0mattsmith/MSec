@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useVault } from '../store/VaultContext';
-import { Download, Upload, Trash2, ShieldCheck, Check, Cloud, Fingerprint, ArrowUpCircle, RefreshCw, Lock, FileUp, ScanLine } from 'lucide-react';
+import { Download, Upload, Trash2, ShieldCheck, Check, Cloud, Fingerprint, ArrowUpCircle, RefreshCw, Lock, FileUp, ScanLine, Copy } from 'lucide-react';
 import {
   APP_VERSION, checkForUpdate, applyUpdate, detectPlatform,
   updateActionLabel, type UpdateInfo, type UpdateProgress,
@@ -11,6 +11,8 @@ import { downloadFile, backupFilename, inspectBackup } from '../lib/backup';
 import { parseImport, SUPPORTED_SOURCES, type ParsedImport } from '../lib/importers';
 import { analyseImport, type ImportAnalysis } from '../lib/dedupe';
 import { EmailSignIn } from './EmailSignIn';
+import { DuplicateScan } from './DuplicateScan';
+import { findDuplicateGroups } from '../lib/dedupe';
 import { ImportReview } from './ImportReview';
 import { QrImport } from './QrImport';
 import type { ImportedTotp } from '../lib/otpimport';
@@ -69,6 +71,7 @@ export function SettingsView() {
   const [bioError, setBioError] = useState('');
   const [signInError, setSignInError] = useState('');
   const [signingIn, setSigningIn] = useState(false);
+  const [showDupScan, setShowDupScan] = useState(false);
   const [bioBusy, setBioBusy] = useState(false);
 
   const handleEnableBiometric = async () => {
@@ -386,6 +389,42 @@ export function SettingsView() {
               <RefreshCw className={`mr-2 h-4 w-4 ${checking ? 'animate-spin' : ''}`} />
               {checking ? 'Checking…' : 'Check for updates'}
             </button>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-[#1A1F26] rounded-xl border border-gray-200 dark:border-slate-800 p-6">
+          <div className="flex flex-col space-y-4">
+            <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center">
+              <Copy className="h-5 w-5 mr-2 text-indigo-500" /> Duplicate entries
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-slate-400">
+              Finds entries already in your vault that look like copies of each other — the same
+              2FA secret, the same site and username, the same card number. Two logins for one
+              site are usually two real accounts, so nothing is removed for you.
+            </p>
+
+            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
+              <input
+                type="checkbox"
+                checked={settings.duplicateAlerts !== false}
+                onChange={(e) => updateSettings({ duplicateAlerts: e.target.checked })}
+                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              Tell me when duplicates appear
+            </label>
+
+            {settings.duplicateAlerts !== false ? (
+              <DuplicateScan />
+            ) : showDupScan ? (
+              <DuplicateScan />
+            ) : (
+              <button
+                onClick={() => setShowDupScan(true)}
+                className="self-start rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Scan now
+              </button>
+            )}
           </div>
         </div>
 

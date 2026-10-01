@@ -104,6 +104,8 @@ export interface GeneratorOptions {
 export interface AppSettings {
   clipboardClearTimeoutSeconds: number; // 0 means disabled
   autoLockMinutes?: number; // 0 means never
+  /** Surface the duplicate count in Settings without being asked. Default on. */
+  duplicateAlerts?: boolean;
 }
 
 export interface AppState {
