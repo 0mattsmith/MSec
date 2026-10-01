@@ -12,12 +12,44 @@ const BUILT_IN_WALLPAPERS = [
   { id: 'sunset', name: 'Sunset Glow', value: 'bg-gradient-to-tr from-pink-500 via-red-500 to-yellow-500' },
 ];
 
+/*
+ * Keep-out zone at the top of the canvas.
+ *
+ * The workspace switcher is absolutely positioned at top-6 (24px) and runs to
+ * roughly 100px. Widgets share the same coordinate space, so anything above
+ * this line sits underneath the switcher and steals its clicks.
+ */
+const CANVAS_TOP_INSET = 116;
+
 const DEFAULT_WIDGETS: Widget[] = [
-  { id: '1', type: 'note', x: 20, y: 100, title: 'Network Setup', content: 'Router: 192.168.1.1\nVPN config updated.', color: 'bg-yellow-200 text-yellow-900', isDark: false },
-  { id: '2', type: 'icon', x: 300, y: 120, title: 'Work Email', iconName: 'Mail' },
-  { id: '3', type: 'icon', x: 400, y: 120, title: 'Banking', iconName: 'Key' },
-  { id: '4', type: 'note', x: 300, y: 220, title: 'To Do', content: '- Rotate API keys\n- Check breach scanner\n- Setup cloud sync', color: 'bg-indigo-100 text-indigo-900', isDark: false }
+  { id: '1', type: 'note', x: 20, y: CANVAS_TOP_INSET + 10, title: 'Network Setup', content: 'Router: 192.168.1.1\nVPN config updated.', color: 'bg-yellow-200 text-yellow-900', isDark: false },
+  { id: '2', type: 'icon', x: 300, y: CANVAS_TOP_INSET + 30, title: 'Work Email', iconName: 'Mail' },
+  { id: '3', type: 'icon', x: 400, y: CANVAS_TOP_INSET + 30, title: 'Banking', iconName: 'Key' },
+  { id: '4', type: 'note', x: 300, y: CANVAS_TOP_INSET + 130, title: 'To Do', content: '- Rotate API keys\n- Check breach scanner\n- Setup cloud sync', color: 'bg-indigo-100 text-indigo-900', isDark: false }
 ];
+
+/**
+ * Nudge anything already sitting under the switcher down below it.
+ *
+ * Changing the defaults only helps new workspaces; an existing dashboard keeps
+ * whatever coordinates it was saved with. Only widgets above the line move, and
+ * only far enough to clear it — x is untouched, so an arrangement stays
+ * recognisably itself.
+ */
+function clearTopInset(list: Workspace[]): Workspace[] {
+  let moved = false;
+  const next = list.map((ws) => ({
+    ...ws,
+    widgets: ws.widgets.map((w) => {
+      if (typeof w.y === 'number' && w.y < CANVAS_TOP_INSET) {
+        moved = true;
+        return { ...w, y: CANVAS_TOP_INSET };
+      }
+      return w;
+    }),
+  }));
+  return moved ? next : list;
+}
 
 const ICONS: Record<string, React.FC<any>> = {
   Mail, Key, ShieldAlert, FileText, Clock, Link2, Briefcase
@@ -44,7 +76,7 @@ export function DashboardView() {
   // are never written to disk in plaintext.
   const [workspaces, setWorkspaces] = useState<Workspace[]>(() =>
     vaultWorkspaces.length > 0
-      ? vaultWorkspaces
+      ? clearTopInset(vaultWorkspaces)
       : [{ id: '1', name: 'My Workspace', wallpaper: null, widgets: DEFAULT_WIDGETS }]
   );
   
@@ -339,7 +371,7 @@ export function DashboardView() {
         return {
           ...w,
           x: Math.max(0, Math.min(container.width - 50, e.clientX - container.left - dragOffset.x)),
-          y: Math.max(0, Math.min(container.height - 50, e.clientY - container.top - dragOffset.y))
+          y: Math.max(CANVAS_TOP_INSET, Math.min(container.height - 50, e.clientY - container.top - dragOffset.y))
         };
       }
       return w;

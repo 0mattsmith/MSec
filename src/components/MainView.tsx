@@ -218,10 +218,16 @@ export function MainView() {
                    </div>
                    <div className="space-y-1">
                      {catItems.map(item => (
-                       <button
+                       <div
+                         role="button"
+                         tabIndex={0}
                          key={item.id}
                          draggable={true}
-                         onDragStart={(e) => { e.dataTransfer.setData('text/plain', item.id); }}
+                         onDragStart={(e) => {
+                           e.dataTransfer.setData('text/plain', item.id);
+                           e.dataTransfer.setData('application/x-msec-item', item.id);
+                           e.dataTransfer.effectAllowed = 'move';
+                         }}
                          onClick={() => { setSelectedItemId(item.id); setIsEditing(false); }}
                          onContextMenu={(e) => showMenu(e, 'item', item.id)}
                          className={cn(
@@ -249,7 +255,7 @@ export function MainView() {
                              {item.username || item.email || item.type}
                            </div>
                          </div>
-                       </button>
+                       </div>
                      ))}
                    </div>
                  </div>
@@ -257,11 +263,15 @@ export function MainView() {
             })
           ) : (
             filteredItems.map(item => (
-              <button
+              <div
+                role="button"
+                tabIndex={0}
                 key={item.id}
                 draggable={true}
                 onDragStart={(e) => {
                    e.dataTransfer.setData('text/plain', item.id);
+                   e.dataTransfer.setData('application/x-msec-item', item.id);
+                   e.dataTransfer.effectAllowed = 'move';
                 }}
                 onClick={() => { setSelectedItemId(item.id); setIsEditing(false); }}
                 onContextMenu={(e) => showMenu(e, 'item', item.id)}
@@ -290,7 +300,7 @@ export function MainView() {
                     {item.username || item.email || item.type}
                   </div>
                 </div>
-              </button>
+              </div>
             ))
           )}
           {filteredItems.length === 0 && (

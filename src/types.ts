@@ -3,6 +3,8 @@ export type ItemCategory = 'login' | 'passkey' | 'note' | 'card' | 'identity';
 export interface VaultFolder {
   id: string;
   name: string;
+  /** Manual sidebar order. Absent on folders made before reordering existed. */
+  position?: number;
   parentId?: string | null;
   color?: string;
   isPrivate?: boolean;
@@ -106,6 +108,8 @@ export interface AppSettings {
   autoLockMinutes?: number; // 0 means never
   /** Surface the duplicate count in Settings without being asked. Default on. */
   duplicateAlerts?: boolean;
+  /** How the sidebar orders folders: manual | az | za | created | modified. */
+  folderSort?: string;
 }
 
 export interface AppState {

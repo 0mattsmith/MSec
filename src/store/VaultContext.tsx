@@ -151,6 +151,8 @@ interface VaultContextType extends AppState {
   deleteItemPermanently: (id: string) => void;
   addFolder: (name: string, color?: string, parentId?: string) => void;
   updateFolder: (id: string, name: string) => void;
+  /** Persist a new manual folder order. Positions follow the array. */
+  reorderFolders: (orderedIds: string[]) => Promise<void>;
   deleteFolder: (id: string) => void;
   clearStorage: () => void;
   updateGeneratorOptions: (options: Partial<AppState['generatorOptions']>) => void;
@@ -824,6 +826,22 @@ function friendlyAuthError(e: any): string {
             try { await putFolderDoc(newFolder); } catch (err) { handleFirestoreError(err, OperationType.CREATE, null); }
           } else {
             setState((prev) => ({ ...prev, folders: [...prev.folders, newFolder] }));
+          }
+        },
+
+        reorderFolders: async (orderedIds) => {
+          const rank = new Map(orderedIds.map((id, index) => [id, index]));
+          let updated: VaultFolder[] = [];
+          setState((prev) => {
+            updated = prev.folders.map((f) =>
+              rank.has(f.id) ? { ...f, position: rank.get(f.id)! } : f);
+            return { ...prev, folders: updated };
+          });
+          if (currentUser) {
+            for (const folder of updated) {
+              try { await putFolderDoc(folder); }
+              catch (e) { console.error('Failed to sync folder order', folder.name, e); }
+            }
           }
         },
 

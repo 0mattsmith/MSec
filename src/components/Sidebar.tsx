@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { useVault } from '../store/VaultContext';
 import { PreviewWireframe } from './PreviewWireframe';
 import { useContextMenu } from './ContextMenu';
+import { sortFolders, reorderedIds, FOLDER_SORT_LABELS, FOLDER_SORT_ORDER, type FolderSort } from '../lib/foldersort';
 import { 
   ShieldCheck, LayoutGrid, Key, FileText, CreditCard, User, 
-  Share2, Trash2, Folder as FolderIcon, Plus, Settings, Sun, Moon,
+  Share2, Trash2, Folder as FolderIcon, Plus, Settings, Sun, Moon, ArrowUpDown, Check,
   Mail, Activity, ShieldAlert, Fingerprint, Star, Clock, LayoutDashboard
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -19,8 +20,17 @@ export function Sidebar() {
     folders, 
     activeFolderId, 
     setActiveFolderId,
-    addFolder
+    addFolder,
+    reorderFolders,
+    settings,
+    updateSettings,
+    items,
   } = useVault();
+
+  const folderSort = (settings.folderSort as FolderSort) || 'manual';
+  const orderedFolders = sortFolders(folders, folderSort, items);
+  const [showSortMenu, setShowSortMenu] = useState(false);
+  const [draggingFolderId, setDraggingFolderId] = useState<string | null>(null);
   
   const { showMenu } = useContextMenu();
 
@@ -48,11 +58,36 @@ export function Sidebar() {
       <button
         onClick={() => { setActiveFolderId(folder.id); setActiveCategory('all'); }} 
         onContextMenu={(e) => showMenu(e, 'folder', folder.id)}
-        onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+        // Reordering is only meaningful in custom order: dragging rows about
+        // under A-Z would appear to work and then snap back on next render.
+        draggable={folderSort === 'manual'}
+        onDragStart={(e) => {
+          // A distinct MIME type so a folder drag is never mistaken for an
+          // item drag by the same drop handler.
+          e.dataTransfer.setData('application/x-msec-folder', folder.id);
+          e.dataTransfer.effectAllowed = 'move';
+          setDraggingFolderId(folder.id);
+        }}
+        onDragEnd={() => setDraggingFolderId(null)}
+        onDragOver={(e) => {
+          e.preventDefault();
+          // Without a dropEffect some browsers show the 'no entry' cursor
+          // and refuse the drop even though preventDefault was called.
+          e.dataTransfer.dropEffect = 'move';
+          setIsDragOver(true);
+        }}
         onDragLeave={() => setIsDragOver(false)}
         onDrop={(e) => {
            e.preventDefault();
            setIsDragOver(false);
+
+           const movedFolderId = e.dataTransfer.getData('application/x-msec-folder');
+           if (movedFolderId && movedFolderId !== folder.id) {
+             reorderFolders(reorderedIds(orderedFolders, movedFolderId, folder.id));
+             setDraggingFolderId(null);
+             return;
+           }
+
            const itemId = e.dataTransfer.getData('text/plain');
            if (itemId) {
               window.dispatchEvent(new CustomEvent('ms-vault-move-item', { detail: { itemId, folderId: folder.id } }));
@@ -174,13 +209,55 @@ export function Sidebar() {
         <div>
           <div className={cn("flex items-center", isCompact ? "justify-center mb-1" : "justify-between px-3 mb-2 text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-slate-500")}>
             {!isCompact && <span>Folders</span>}
-            <button onClick={() => setIsCreatingFolder(true)} className="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400" title="New Folder">
-              <Plus className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              <div className="relative">
+                <button
+                  onClick={() => setShowSortMenu(!showSortMenu)}
+                  className={cn(
+                    'hover:text-indigo-600 dark:hover:text-indigo-400',
+                    folderSort === 'manual' ? 'text-gray-400' : 'text-indigo-500',
+                  )}
+                  title={`Sort folders — ${FOLDER_SORT_LABELS[folderSort]}`}
+                >
+                  <ArrowUpDown className="h-3.5 w-3.5" />
+                </button>
+                {showSortMenu && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowSortMenu(false)} />
+                    <div className="absolute right-0 z-50 mt-2 w-48 overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-2xl dark:border-slate-800 dark:bg-[#1A1F26]">
+                      {FOLDER_SORT_ORDER.map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() => { updateSettings({ folderSort: mode }); setShowSortMenu(false); }}
+                          className={cn(
+                            'flex w-full items-center justify-between px-3 py-2 text-left text-xs normal-case tracking-normal',
+                            mode === folderSort
+                              ? 'bg-indigo-50 font-semibold text-indigo-700 dark:bg-indigo-600/10 dark:text-indigo-400'
+                              : 'text-gray-600 hover:bg-gray-50 dark:text-slate-300 dark:hover:bg-slate-800/60',
+                          )}
+                        >
+                          {FOLDER_SORT_LABELS[mode]}
+                          {mode === folderSort && <Check className="h-3 w-3" />}
+                        </button>
+                      ))}
+                      <p className="border-t border-gray-100 px-3 py-2 text-[10px] font-normal normal-case leading-relaxed tracking-normal text-gray-400 dark:border-slate-800 dark:text-slate-500">
+                        Custom order is kept — the others are just views, so your
+                        arrangement is still here when you switch back.
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+              <button onClick={() => setIsCreatingFolder(true)} className="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400" title="New Folder">
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
           </div>
           <div className={cn("space-y-1", isCompact ? "border-none ml-0 pl-0" : "pl-2 border-l border-transparent dark:border-slate-800 ml-3")}>
-             {folders.map(folder => (
-                <FolderNavItem key={folder.id} folder={folder} />
+             {orderedFolders.map(folder => (
+                <div key={folder.id} className={cn(draggingFolderId === folder.id && 'opacity-40')}>
+                  <FolderNavItem folder={folder} />
+                </div>
              ))}
              {isCreatingFolder && (
                <form onSubmit={handleCreateFolder} className={cn("py-1", isCompact ? "px-0" : "px-3")}>

@@ -21,7 +21,7 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
   const [menuType, setMenuType] = useState<'item' | 'folder' | null>(null);
   const [targetId, setTargetId] = useState<string | null>(null);
 
-  const { updateItem, moveToTrash, restoreFromTrash, deleteItemPermanently, updateFolder, deleteFolder, setActiveFolderId, items, activeCategory } = useVault();
+  const { updateItem, moveToTrash, restoreFromTrash, deleteItemPermanently, updateFolder, deleteFolder, setActiveFolderId, items, folders, activeCategory } = useVault();
 
   useEffect(() => {
     const handleGlobalClick = () => hideMenu();
@@ -100,6 +100,40 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
                         })} 
                         label={items.find(i => i.id === targetId)?.isShared ? "Remove from Shared" : "Mark as Shared"} 
                       />
+                      {/*
+                        Filing an entry was drag-only, which left no way to do
+                        it at all on a touch screen - HTML5 drag and drop does
+                        not exist there. This is the path that always works.
+                      */}
+                      <div className="h-[1px] bg-gray-200 dark:bg-slate-700 my-1"></div>
+                      <div className="px-3 pb-1 pt-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-slate-500">
+                        Move to folder
+                      </div>
+                      <div className="max-h-48 overflow-y-auto">
+                        {folders.length === 0 && (
+                          <div className="px-3 py-1.5 text-xs text-gray-400 dark:text-slate-500">
+                            No folders yet
+                          </div>
+                        )}
+                        {folders.map((folder) => {
+                          const current = items.find((i) => i.id === targetId)?.folderId === folder.id;
+                          return (
+                            <MenuItem
+                              key={folder.id}
+                              onClick={() => handleAction(() => updateItem(targetId, { folderId: folder.id }))}
+                              label={current ? `\u2713 ${folder.name}` : folder.name}
+                              className={current ? 'text-indigo-600 dark:text-indigo-400' : undefined}
+                            />
+                          );
+                        })}
+                        {items.find((i) => i.id === targetId)?.folderId && (
+                          <MenuItem
+                            onClick={() => handleAction(() => updateItem(targetId, { folderId: null }))}
+                            label="Remove from folder"
+                            className="text-gray-500 dark:text-slate-400"
+                          />
+                        )}
+                      </div>
                       <div className="h-[1px] bg-gray-200 dark:bg-slate-700 my-1"></div>
                       <MenuItem onClick={() => handleAction(() => moveToTrash(targetId))} label="Move to Trash" className="text-red-600 dark:text-red-400" />
                     </>
