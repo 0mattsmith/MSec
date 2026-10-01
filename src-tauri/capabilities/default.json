@@ -29,7 +29,17 @@
     },
     "core:app:allow-version",
     "upload:default",
-    "opener:allow-open-path",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        {
+          "path": "$APPCACHE/*.apk"
+        },
+        {
+          "path": "$APPCACHE/*"
+        }
+      ]
+    },
     "deep-link:default"
   ]
 }

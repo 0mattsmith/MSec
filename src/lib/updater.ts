@@ -196,6 +196,19 @@ async function silentDesktopUpdate(onProgress?: (p: UpdateProgress) => void): Pr
  * Returns an error message rather than throwing, so the UI can show what
  * went wrong instead of appearing to do nothing.
  */
+/*
+ * Opening the browser is a legitimate outcome on the web, and a failure
+ * everywhere else: it means the in-app path broke and we quietly did something
+ * worse instead. Returning null in that case is how a broken updater comes to
+ * look like a deliberate design — it just sends you to a web page, forever,
+ * saying nothing. So a fallback that follows a failure reports it.
+ */
+function fellBackTo(problems: string[]): string | null {
+  if (problems.length === 0) return null;
+  return 'Updating inside the app failed, so the download was opened in your browser ' +
+    `instead — install it from there. Cause: ${problems.join('; ')}`;
+}
+
 export async function applyUpdate(
   info: UpdateInfo,
   platform: Platform,
@@ -274,7 +287,7 @@ export async function applyUpdate(
     try {
       const { openUrl } = await import('@tauri-apps/plugin-opener');
       await openUrl(target);
-      return null;
+      return fellBackTo(problems);
     } catch (e: any) {
       problems.push(`opener: ${e?.message || e}`);
     }
@@ -282,7 +295,7 @@ export async function applyUpdate(
 
   try {
     const opened = window.open(target, '_blank', 'noopener,noreferrer');
-    if (opened) return null;
+    if (opened) return fellBackTo(problems);
     problems.push('window.open was blocked');
   } catch (e: any) {
     problems.push(`window.open: ${e?.message || e}`);
@@ -292,7 +305,7 @@ export async function applyUpdate(
   // takes over the download and the app stays running behind it.
   try {
     window.location.href = target;
-    return null;
+    return fellBackTo(problems);
   } catch (e: any) {
     problems.push(`navigation: ${e?.message || e}`);
   }
