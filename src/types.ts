@@ -32,6 +32,8 @@ export interface VaultItem {
   customFields?: CustomField[];
   /** ID from the app this was imported from — lets a re-import be recognised. */
   externalId?: string;
+  /** A user-chosen icon, as a data: URL. Encrypted with the rest of the vault. */
+  iconData?: string;
   
   // Login fields
   username?: string;
@@ -110,6 +112,12 @@ export interface AppSettings {
   duplicateAlerts?: boolean;
   /** How the sidebar orders folders: manual | az | za | created | modified. */
   folderSort?: string;
+  /**
+   * Fetch favicons for entries with no bundled brand mark. Off by default:
+   * it reveals to each site that someone at your IP opened a vault containing
+   * an entry for it.
+   */
+  faviconFetch?: boolean;
 }
 
 export interface AppState {

@@ -714,6 +714,13 @@ function friendlyAuthError(e: any): string {
         lock,
         setMasterPassword,
         setTheme: (theme) => updateState({ theme }),
+        /*
+         * These two are mutually exclusive views and each clears the other:
+         * picking a category leaves any folder, picking a folder returns you to
+         * 'all'. Call ONE of them. Calling setActiveFolderId followed by
+         * setActiveCategory('all') looks harmless and silently deselects the
+         * folder you just chose.
+         */
         setActiveCategory: (activeCategory) => updateState({ activeCategory, activeFolderId: null, selectedItemId: null }),
         setActiveFolderId: (activeFolderId) => updateState({ activeFolderId, activeCategory: 'all', selectedItemId: null }),
         setSelectedItemId: (selectedItemId) => updateState({ selectedItemId }),

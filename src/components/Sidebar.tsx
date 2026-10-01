@@ -56,7 +56,11 @@ export function Sidebar() {
     const [isDragOver, setIsDragOver] = useState(false);
     return (
       <button
-        onClick={() => { setActiveFolderId(folder.id); setActiveCategory('all'); }} 
+        // setActiveFolderId already switches the category to 'all'. Calling
+        // setActiveCategory as well undid it: that setter clears activeFolderId,
+        // so the folder was selected and then immediately deselected, leaving
+        // the unfiltered list and the appearance of a dead button.
+        onClick={() => setActiveFolderId(folder.id)}
         onContextMenu={(e) => showMenu(e, 'folder', folder.id)}
         // Reordering is only meaningful in custom order: dragging rows about
         // under A-Z would appear to work and then snap back on next render.

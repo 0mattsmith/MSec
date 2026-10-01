@@ -305,7 +305,24 @@ export function MainView() {
           )}
           {filteredItems.length === 0 && (
             <div className="p-8 text-center text-sm text-gray-500 dark:text-neutral-500">
-              No items found.
+              {/*
+                An empty folder said "No items found", which reads identically to
+                a broken filter. Naming the folder confirms the click worked and
+                says what to do about it.
+              */}
+              {activeFolderId ? (
+                <>
+                  <p className="font-medium text-gray-600 dark:text-slate-400">
+                    {folders.find((f) => f.id === activeFolderId)?.name || 'This folder'} is empty.
+                  </p>
+                  <p className="mt-1 text-xs">
+                    Drag an entry onto the folder in the sidebar, or right-click an entry and
+                    choose <span className="font-medium">Move to folder</span>.
+                  </p>
+                </>
+              ) : (
+                'No items found.'
+              )}
             </div>
           )}
         </div>
