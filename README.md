@@ -35,6 +35,26 @@ To develop the desktop app locally: `npm install`, then `npx tauri icon public/i
 
 On phones the dashboard switches to a homescreen-style layout: a 4-column grid of icons and folders with the remaining widgets stacked full-width below. Icon merging (drag-to-folder) is desktop-only; folders opened by tapping work everywhere.
 
+## Updating
+
+**Windows, macOS, Linux.** MSec checks on launch and from Settings. Choosing to
+update downloads the new build, verifies its signature, installs it and
+relaunches — no installer to click through. The Windows build installs per-user
+into `%LOCALAPPDATA%` specifically so that updates need no UAC prompt; a
+per-machine install would ask for elevation every single time. The signature
+check is the point: a self-installing binary that didn't verify what it fetched
+would be a gift to anyone able to tamper with the download. If a release is
+published without `TAURI_SIGNING_PRIVATE_KEY` set, MSec says so and falls back
+to the release page rather than running something unverified.
+
+**Android** downloads the APK inside the app with progress, then hands it to the
+system installer. Android then asks you to confirm — once per source, then once
+per install. That tap is mandatory for anything installed outside the Play
+Store and no app can suppress it, so MSec does not pretend otherwise.
+
+**Self-hosted** instances are whatever image you last pulled; Settings shows the
+command. See [DOCKER.md](DOCKER.md).
+
 ## Security model
 
 MSec is zero-knowledge: your master password, and anything derived from it, never leaves your device.

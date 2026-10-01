@@ -125,6 +125,18 @@ export function updateActionLabel(platform: Platform): string {
   }
 }
 
+/*
+ * Shown when GitHub has a newer release but it carries no signed manifest.
+ * The cause is always the same: TAURI_SIGNING_PRIVATE_KEY was not set when the
+ * release was built, so tauri-action skipped latest.json and the .sig files.
+ */
+const UPDATER_NOT_SIGNED =
+  'This release was published without update signatures, so MSec will not ' +
+  'install it automatically — it refuses to run an unverified binary. ' +
+  'Opening the release page so you can install it by hand. (To fix it ' +
+  'permanently: add TAURI_SIGNING_PRIVATE_KEY as a repository secret and ' +
+  'cut a new release.)';
+
 export interface UpdateProgress {
   stage: 'checking' | 'downloading' | 'installing' | 'restarting';
   /** 0–100 where known. */
@@ -145,7 +157,13 @@ async function silentDesktopUpdate(onProgress?: (p: UpdateProgress) => void): Pr
     onProgress?.({ stage: 'checking' });
 
     const update = await check();
-    if (!update) return 'No signed update is available yet.';
+    if (!update) {
+      // check() reads latest.json from the release. GitHub says a newer version
+      // exists (that is why this ran at all), so the manifest being absent means
+      // the release was built without a signing key — not that you are up to
+      // date. Saying "no update available" here would be actively misleading.
+      return UPDATER_NOT_SIGNED;
+    }
 
     let downloaded = 0;
     let total = 0;

@@ -367,8 +367,10 @@ export function SettingsView() {
                 )}
                 {platform === 'android' && (
                   <p className="mt-2 text-xs text-indigo-800/70 dark:text-indigo-300/70">
-                    Downloads inside the app, then Android asks you to confirm the install.
-                    That confirmation is required by the system for sideloaded apps.
+                    Downloads inside the app, then Android asks you to confirm the install and
+                    reopens MSec afterwards. That one tap is required by the system for any app
+                    installed outside the Play Store and cannot be skipped — not by MSec, not by
+                    anything short of being a device-owner app.
                   </p>
                 )}
               </div>
